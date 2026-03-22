@@ -2,15 +2,14 @@ import Link from "next/link";
 
 export default function Home() {
   return (
-    <main className="min-h-screen bg-gradient-to-b from-neutral-950 to-neutral-900 text-white flex flex-col">
+    <main className="min-h-screen bg-neutral-950 text-white flex flex-col items-center">
       {/* NAVBAR */}
-      <nav className="w-full px-8 py-5 flex justify-between items-center border-b border-neutral-700">
+      <nav className="w-full max-w-4xl px-6 py-5 flex justify-between items-center border-b border-neutral-800">
         <span className="text-sm font-medium tracking-wide text-neutral-300 hover:text-neutral-100 transition-colors duration-200">
           Richard Wuebker
         </span>
 
         <div className="flex gap-8 text-sm text-neutral-400">
-          {/* Projects dropdown */}
           <div className="relative group">
             <button className="hover:text-neutral-100 transition-colors duration-200 cursor-pointer tracking-wide">
               Projects
@@ -28,34 +27,30 @@ export default function Home() {
       </nav>
 
       {/* HERO */}
-      <section className="flex-1 flex items-start justify-center px-8 pt-28 pb-20">
-        <div className="flex flex-col gap-6 max-w-3xl w-full">
+      <section className="w-full max-w-4xl px-6 min-h-[80vh] flex items-center">
+        <div className="flex flex-col gap-6 mt-16">
           <p className="text-xs font-medium tracking-widest text-neutral-500 uppercase">
             Portfolio
           </p>
 
-          <h1 className="text-5xl md:text-6xl font-semibold leading-tight tracking-tight text-neutral-50">
-            Quantitative Developer<br />& Systematic Researcher
+          <h1 className="text-5xl md:text-6xl font-semibold leading-tight tracking-tight text-white">
+            Quantitative Developer &amp;<br />Systematic Researcher
           </h1>
 
-          <p className="text-lg text-neutral-300 leading-relaxed">
+          <p className="text-lg text-neutral-300 leading-relaxed max-w-xl">
             Building{" "}
             <span className="text-white">systematic investment frameworks</span>,{" "}
             <span className="text-white">signal evaluation systems</span>, and{" "}
             <span className="text-white">AI-assisted research tools</span>.
           </p>
 
-          <div className="mt-10">
-            <a
-              href="/resume/resume.pdf"
-              download
-              className="inline-flex items-center gap-2 px-5 py-2.5 bg-neutral-100 text-neutral-900 text-sm font-medium rounded-md shadow-md border border-neutral-200 hover:bg-neutral-100 hover:scale-[1.02] hover:shadow-lg transition-all duration-200"
-            >
-              Download Resume
-            </a>
-          </div>
-
-          <div className="border-t border-neutral-800 mt-20 pt-10" />
+          <a
+            href="/resume/resume.pdf"
+            download
+            className="inline-flex w-fit items-center px-8 py-3 bg-white text-black text-sm font-medium tracking-wide rounded-md hover:bg-neutral-100 transition-all duration-200"
+          >
+            Download Resume
+          </a>
         </div>
       </section>
     </main>
