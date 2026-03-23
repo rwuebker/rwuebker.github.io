@@ -115,6 +115,210 @@ function formatReport(report: any): string {
   return lines.join("\n");
 }
 
+function generateRiskInsight(report: any, query: string): string | null {
+  if (!report) return null;
+
+  const q = query.toLowerCase();
+
+  if (
+    q.includes("risk") ||
+    q.includes("drawdown") ||
+    q.includes("stable") ||
+    q.includes("robust") ||
+    q.includes("fail")
+  ) {
+    const factor = report?.sections?.find(
+      (s: any) => s.title === "Factor Decomposition"
+    )?.content;
+
+    const stability = report?.sections?.find(
+      (s: any) => s.title === "Stability"
+    )?.content;
+
+    const quant = report?.sections?.find(
+      (s: any) => s.title === "Quantile Analysis"
+    )?.content;
+
+    if (!factor && !stability && !quant) {
+      return "No risk-related data available.";
+    }
+
+    const beta = factor?.beta ?? null;
+    const alpha = factor?.alpha ?? null;
+    const residualStd = factor?.residual_std ?? null;
+    const csIcStd = stability?.cs_ic_std ?? null;
+    const spread = quant?.spread ?? null;
+
+    const lines: string[] = [];
+    lines.push("Risk Intuition:");
+    lines.push("");
+
+    if (typeof beta === "number") {
+      lines.push(`Factor Exposure Risk: Beta = ${beta.toFixed(2)}`);
+      lines.push(
+        beta > 1
+          ? "This suggests the strategy is meaningfully exposed to its underlying factor and may underperform if that factor weakens."
+          : "This suggests more limited factor sensitivity."
+      );
+      lines.push("");
+    }
+
+    if (typeof csIcStd === "number") {
+      lines.push(`Stability Risk: Cross-sectional IC Std = ${csIcStd.toFixed(4)}`);
+      lines.push(
+        csIcStd < 0.1
+          ? "Signal behavior appears stable across periods, reducing robustness concerns."
+          : "Signal behavior appears unstable across periods, which raises robustness concerns."
+      );
+      lines.push("");
+    }
+
+    if (typeof residualStd === "number") {
+      lines.push(`Residual Risk: Residual Std = ${residualStd.toFixed(4)}`);
+      lines.push(
+        residualStd < 0.1
+          ? "Low unexplained variance suggests tight factor fit, but also implies limited independent diversification."
+          : "High unexplained variance suggests either noise or unmodeled sources of return."
+      );
+      lines.push("");
+    }
+
+    if (typeof spread === "number") {
+      lines.push(`Drawdown Intuition: Spread = ${spread.toFixed(4)}`);
+      lines.push(
+        spread > 0.1
+          ? "The signal appears economically meaningful, but future drawdowns could still occur if the spread compresses or reverses."
+          : "The signal spread is small, so even modest trading frictions or regime shifts could eliminate profitability."
+      );
+    }
+
+    if (typeof alpha === "number" && Math.abs(alpha) < 0.01) {
+      lines.push("");
+      lines.push(
+        "Overall, this strategy appears more exposed to factor risk than supported by independent alpha."
+      );
+    }
+
+    return lines.join("\n");
+  }
+
+  return null;
+}
+
+function generatePnLInsight(report: any, query: string): string | null {
+  if (!report) return null;
+
+  const q = query.toLowerCase();
+
+  if (
+    q.includes("pnl") ||
+    q.includes("profit") ||
+    q.includes("returns") ||
+    q.includes("how profitable")
+  ) {
+    const quant = report?.sections?.find(
+      (s: any) => s.title === "Quantile Analysis"
+    )?.content;
+
+    const stability = report?.sections?.find(
+      (s: any) => s.title === "Stability"
+    )?.content;
+
+    if (!quant) return "No data available.";
+
+    const spread = quant.spread;
+    const stabilityScore = stability?.cs_ic_std ?? 1;
+
+    return `PnL Intuition:
+
+The long/short spread of ${spread.toFixed(4)} represents the expected return differential between top and bottom signals.
+
+This implies ${
+      spread > 0.1
+        ? "strong potential profitability for a market-neutral strategy."
+        : "limited profitability and weak economic signal."
+    }
+
+${
+  stabilityScore < 0.1
+    ? "The low variability in IC suggests returns would likely be consistent over time."
+    : "High variability in IC suggests returns may be unstable and regime-dependent."
+}`;
+  }
+
+  return null;
+}
+
+function generateLongShortInsight(report: any, query: string): string | null {
+  if (!report) return null;
+
+  const q = query.toLowerCase();
+
+  if (
+    q.includes("long short") ||
+    q.includes("long/short") ||
+    q.includes("trade this") ||
+    q.includes("portfolio")
+  ) {
+    const quant = report?.sections?.find(
+      (s: any) => s.title === "Quantile Analysis"
+    )?.content;
+
+    if (!quant) return "No quantile data available.";
+
+    const spread = quant.spread;
+    const top = quant.quantiles?.find((x: any) => x.quantile === 5);
+    const bottom = quant.quantiles?.find((x: any) => x.quantile === 1);
+
+    return `Long/Short Portfolio Construction:
+
+Long: Top quantile (Q5) → mean return ${top.mean_return.toFixed(4)}
+Short: Bottom quantile (Q1) → mean return ${bottom.mean_return.toFixed(4)}
+
+Expected spread (Q5 - Q1): ${spread.toFixed(4)}
+
+This indicates ${
+      spread > 0.1
+        ? "a strong cross-sectional signal suitable for a market-neutral long/short strategy."
+        : "a weak signal with limited economic value for long/short construction."
+    }`;
+  }
+
+  return null;
+}
+
+function isUnsupportedQuery(query: string): boolean {
+  const q = query.toLowerCase();
+
+  return (
+    q.includes("which factor") ||
+    q.includes("what factor") ||
+    q.includes("factor breakdown") ||
+    q.includes("sector") ||
+    q.includes("exposure breakdown")
+  );
+}
+
+function generateLimitResponse(query: string): string {
+  const q = query.toLowerCase();
+
+  if (q.includes("factor")) {
+    return `This model estimates aggregate factor exposure (beta), but does not decompose returns into specific factors such as value, momentum, or size.
+
+Identifying individual factor contributions would require extending the analysis to a multi-factor model.`;
+  }
+
+  if (q.includes("sector") || q.includes("breakdown")) {
+    return `The current analysis does not include sector- or factor-level decomposition.
+
+Extending this would require additional feature inputs and a more granular attribution model.`;
+  }
+
+  return `This query is outside the scope of the current model.
+
+The system focuses on signal evaluation, predictive power, and factor exposure rather than detailed attribution.`;
+}
+
 function extractSection(report: any, title: string) {
   return report?.sections?.find((s: any) => s.title === title)?.content;
 }
@@ -245,6 +449,48 @@ export default function SignalScopeDemoPage() {
         setLoading(false);
       }
 
+      return;
+    }
+
+    if (isUnsupportedQuery(input)) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: generateLimitResponse(input) },
+      ]);
+      setLoading(false);
+      return;
+    }
+
+    const risk = generateRiskInsight(lastResult, input);
+
+    if (risk) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: risk },
+      ]);
+      setLoading(false);
+      return;
+    }
+
+    const pnl = generatePnLInsight(lastResult, input);
+
+    if (pnl) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: pnl },
+      ]);
+      setLoading(false);
+      return;
+    }
+
+    const longShort = generateLongShortInsight(lastResult, input);
+
+    if (longShort) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: longShort },
+      ]);
+      setLoading(false);
       return;
     }
 
