@@ -4,6 +4,7 @@ import { useState } from "react";
 import { routeUserInput } from "@/lib/signalscope/router";
 import { executeAction } from "@/lib/signalscope/actions";
 import { SignalScopeReport } from "@/lib/signalscope/types";
+import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
 
 interface Message {
   role: "user" | "assistant";
@@ -89,6 +90,8 @@ function formatReport(report: any): string {
 }
 
 export default function SignalScopeDemoPage() {
+  console.log("API BASE:", SIGNALSCOPE_API_BASE);
+
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [lastResult, setLastResult] = useState<SignalScopeReport | null>(null);
