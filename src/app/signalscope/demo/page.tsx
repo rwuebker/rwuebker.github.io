@@ -10,11 +10,21 @@ interface Message {
   content: string;
 }
 
-function generateSuggestion(report: any): string | null {
+function generateSuggestion(
+  report: any,
+  lastSource: string | null,
+  previousSource: string | null
+): string | null {
   if (!report?.conclusion?.type) return null;
 
   const type = report.conclusion.type;
 
+  // === CASE 1: Comparison just happened ===
+  if (previousSource === "momentum" && lastSource === "random") {
+    return "This comparison shows the original signal is much stronger than noise. Want to test its stability or explore residual alpha?";
+  }
+
+  // === CASE 2: First-time analysis ===
   if (type === "factor-driven") {
     return "This looks factor-driven. Want to compare it to a random signal?";
   }
@@ -23,7 +33,8 @@ function generateSuggestion(report: any): string | null {
     return "This may contain alpha. Want to test its stability or compare to random?";
   }
 
-  return "Want to analyze another signal or compare this one?";
+  // fallback
+  return "Want to analyze another signal or explore this one further?";
 }
 
 function formatReport(report: any): string {
@@ -110,6 +121,8 @@ export default function SignalScopeDemoPage() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [lastSource, setLastSource] = useState<string | null>(null);
+  const [previousSource, setPreviousSource] = useState<string | null>(null);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -130,7 +143,16 @@ export default function SignalScopeDemoPage() {
           source: "random",
         });
 
-        const suggestion = generateSuggestion(result);
+        // compute next context BEFORE updating state
+        const nextPrevious = lastSource;
+        const nextLast = "random";
+
+        // generate suggestion using NEXT state
+        const suggestion = generateSuggestion(result, nextLast, nextPrevious);
+
+        // update React state
+        setPreviousSource(nextPrevious);
+        setLastSource(nextLast);
 
         const assistantMessage: Message = {
           role: "assistant",
@@ -156,7 +178,16 @@ export default function SignalScopeDemoPage() {
       const route = await routeUserInput(userMessage.content);
       const result = await executeAction(route);
 
-      const suggestion = generateSuggestion(result);
+      // compute next context BEFORE updating state
+      const nextPrevious = lastSource;
+      const nextLast = route.source || null;
+
+      // generate suggestion using NEXT state (not stale React state)
+      const suggestion = generateSuggestion(result, nextLast, nextPrevious);
+
+      // now update React state
+      setPreviousSource(nextPrevious);
+      setLastSource(nextLast);
 
       const assistantMessage: Message = {
         role: "assistant",
