@@ -3,12 +3,27 @@
 import { useState } from "react";
 import { routeUserInput } from "@/lib/signalscope/router";
 import { executeAction } from "@/lib/signalscope/actions";
-import { SignalScopeReport } from "@/lib/signalscope/types";
 import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+}
+
+function generateSuggestion(report: any): string | null {
+  if (!report?.conclusion?.type) return null;
+
+  const type = report.conclusion.type;
+
+  if (type === "factor-driven") {
+    return "This looks factor-driven. Want to compare it to a random signal?";
+  }
+
+  if (type === "independent alpha") {
+    return "This may contain alpha. Want to test its stability or compare to random?";
+  }
+
+  return "Want to analyze another signal or compare this one?";
 }
 
 function formatReport(report: any): string {
@@ -94,40 +109,68 @@ export default function SignalScopeDemoPage() {
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
-  const [lastResult, setLastResult] = useState<SignalScopeReport | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    if (!input.trim() || loading) return;
 
-    const userMessage = input.trim();
+    if (!input.trim()) return;
+
+    const userMessage: Message = { role: "user", content: input };
+    const normalized = input.toLowerCase().trim();
+
+    setMessages((prev) => [...prev, userMessage]);
     setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMessage }]);
     setLoading(true);
 
-    try {
-      const intent = await routeUserInput(userMessage);
+    if (normalized === "yes" || normalized.includes("compare")) {
+      try {
+        const result = await executeAction({
+          action: "analyze_signal",
+          source: "random",
+        });
 
-      let report: SignalScopeReport;
-      if (intent.action === "explain_last_result" && lastResult) {
-        report = lastResult;
-      } else {
-        report = await executeAction(intent);
-        setLastResult(report);
+        const suggestion = generateSuggestion(result);
+
+        const assistantMessage: Message = {
+          role: "assistant",
+          content:
+            formatReport(result) +
+            (suggestion ? `\n\n→ ${suggestion}` : ""),
+        };
+
+        setMessages((prev) => [...prev, assistantMessage]);
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "Error running comparison." },
+        ]);
+      } finally {
+        setLoading(false);
       }
 
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: formatReport(report) },
-      ]);
-    } catch (err: unknown) {
-      const message =
-        err instanceof Error ? err.message : "An unexpected error occurred.";
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: `Error: ${message}` },
-      ]);
+      return;
+    }
+
+    try {
+      const route = await routeUserInput(userMessage.content);
+      const result = await executeAction(route);
+
+      const suggestion = generateSuggestion(result);
+
+      const assistantMessage: Message = {
+        role: "assistant",
+        content:
+          formatReport(result) +
+          (suggestion ? `\n\n→ ${suggestion}` : ""),
+      };
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (err) {
+      const errorMessage: Message = {
+        role: "assistant",
+        content: "Error processing request.",
+      };
+      setMessages((prev) => [...prev, errorMessage]);
     } finally {
       setLoading(false);
     }
@@ -171,7 +214,7 @@ export default function SignalScopeDemoPage() {
                 SignalScope
               </span>
               <div className="inline-block px-4 py-3 rounded-md text-sm bg-neutral-900 border border-neutral-800 text-neutral-400">
-                Analyzing...
+                Analyzing signal...
               </div>
             </div>
           )}
