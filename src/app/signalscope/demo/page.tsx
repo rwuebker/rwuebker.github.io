@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import { routeUserInput } from "@/lib/signalscope/router";
 import { executeAction } from "@/lib/signalscope/actions";
 import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
@@ -115,6 +115,71 @@ function formatReport(report: any): string {
   return lines.join("\n");
 }
 
+function extractSection(report: any, title: string) {
+  return report?.sections?.find((s: any) => s.title === title)?.content;
+}
+
+function generateDeepInsight(
+  report: any,
+  query: string
+): string | null {
+  if (!report) return null;
+
+  const q = query.toLowerCase();
+
+  // === STABILITY ===
+  if (q.includes("stability")) {
+    const stability = extractSection(report, "Stability");
+
+    if (!stability) return "No stability data available.";
+
+    return `Stability Analysis:
+Mean IC: ${stability.cs_ic_mean.toFixed(4)}
+Std Dev: ${stability.cs_ic_std.toFixed(4)}
+
+This indicates ${
+      stability.cs_ic_std < 0.1
+        ? "highly consistent performance over time."
+        : "unstable and inconsistent performance."
+    }`;
+  }
+
+  // === FACTOR EXPLANATION ===
+  if (q.includes("why") || q.includes("factor")) {
+    const factor = extractSection(report, "Factor Decomposition");
+
+    if (!factor) return "No factor decomposition available.";
+
+    return `Factor Explanation:
+Beta: ${factor.beta.toFixed(2)}
+Alpha: ${factor.alpha.toFixed(4)}
+
+This signal is ${
+      Math.abs(factor.alpha) < 0.01
+        ? "primarily driven by factor exposure rather than independent alpha."
+        : "showing signs of independent alpha beyond factor exposure."
+    }`;
+  }
+
+  // === RESIDUAL ANALYSIS ===
+  if (q.includes("residual")) {
+    const factor = extractSection(report, "Factor Decomposition");
+
+    if (!factor) return "No residual data available.";
+
+    return `Residual Analysis:
+Residual Std: ${factor.residual_std.toFixed(4)}
+
+This suggests ${
+      factor.residual_std < 0.1
+        ? "low unexplained variance (tight factor fit)."
+        : "high unexplained variance (potential alpha or noise)."
+    }`;
+  }
+
+  return null;
+}
+
 export default function SignalScopeDemoPage() {
   console.log("API BASE:", SIGNALSCOPE_API_BASE);
 
@@ -123,6 +188,13 @@ export default function SignalScopeDemoPage() {
   const [loading, setLoading] = useState(false);
   const [lastSource, setLastSource] = useState<string | null>(null);
   const [previousSource, setPreviousSource] = useState<string | null>(null);
+  const [lastResult, setLastResult] = useState<any>(null);
+
+  const chatEndRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, loading]);
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -142,6 +214,8 @@ export default function SignalScopeDemoPage() {
           action: "analyze_signal",
           source: "random",
         });
+
+        setLastResult(result);
 
         // compute next context BEFORE updating state
         const nextPrevious = lastSource;
@@ -174,9 +248,22 @@ export default function SignalScopeDemoPage() {
       return;
     }
 
+    const deepInsight = generateDeepInsight(lastResult, input);
+
+    if (deepInsight) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: deepInsight },
+      ]);
+      setLoading(false);
+      return;
+    }
+
     try {
       const route = await routeUserInput(userMessage.content);
       const result = await executeAction(route);
+
+      setLastResult(result);
 
       // compute next context BEFORE updating state
       const nextPrevious = lastSource;
@@ -249,6 +336,7 @@ export default function SignalScopeDemoPage() {
               </div>
             </div>
           )}
+          <div ref={chatEndRef} />
         </div>
 
         <form onSubmit={handleSubmit} className="flex gap-3">
