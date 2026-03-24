@@ -9,10 +9,19 @@ export async function executeAction(
 ): Promise<SignalScopeReport> {
   if (intent.action === "analyze_signal") {
     const source = intent.source ?? "momentum";
-    const response = await fetch(
-      `${SIGNALSCOPE_API_BASE}/analyze/report?source=${encodeURIComponent(source)}`,
-      { method: "POST" }
-    );
+
+    const hasSignal = Array.isArray(intent.signal) && intent.signal.length > 0;
+
+    const response = hasSignal
+      ? await fetch(`${SIGNALSCOPE_API_BASE}/analyze/report?source=momentum`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ signal: intent.signal }),
+        })
+      : await fetch(
+          `${SIGNALSCOPE_API_BASE}/analyze/report?source=${encodeURIComponent(source)}`,
+          { method: "POST" }
+        );
 
     if (!response.ok) {
       throw new Error(`SignalScope API error: ${response.status}`);

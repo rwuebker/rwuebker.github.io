@@ -2,6 +2,7 @@ export interface IntentAction {
   action: string;
   source?: string;
   explanation?: string;
+  signal?: any[];
 }
 
 export interface SignalScopeReport {
@@ -14,4 +15,10 @@ export interface SignalScopeReport {
     type: string;
     confidence: string;
   };
+  sections?: any[];
+  _introspection?: {
+    summary: string;
+    details: Record<string, any>;
+  };
+  [key: string]: any;
 }

@@ -8,6 +8,10 @@ import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
 interface Message {
   role: "user" | "assistant";
   content: string;
+  _introspection?: {
+    summary: string;
+    details: Record<string, any>;
+  };
 }
 
 function generateSuggestion(
@@ -113,6 +117,172 @@ function formatReport(report: any): string {
   }
 
   return lines.join("\n");
+}
+
+function generateComparisonInsight(current: any, baseline: any, label: string): string {
+  const getSection = (res: any, title: string) =>
+    res.sections?.find((s: any) => s.title === title)?.content;
+
+  const curPred = getSection(current, "Predictive Power");
+  const basePred = getSection(baseline, "Predictive Power");
+  const curQuant = getSection(current, "Quantile Analysis");
+  const baseQuant = getSection(baseline, "Quantile Analysis");
+
+  if (!curPred || !basePred || !curQuant || !baseQuant) {
+    return "Unable to compare signals due to missing data.";
+  }
+
+  const icDiff = curPred.ic - basePred.ic;
+  const spreadDiff = curQuant.spread - baseQuant.spread;
+
+  let summary = "";
+
+  if (Math.abs(icDiff) > 0.05) {
+    summary += icDiff > 0
+      ? "The current signal has stronger predictive power than the baseline. "
+      : "The baseline has stronger predictive power than the current signal. ";
+  } else {
+    summary += "Predictive power is similar between the two signals. ";
+  }
+
+  if (Math.abs(spreadDiff) > 0.05) {
+    summary += spreadDiff > 0
+      ? "It also has a stronger long/short spread. "
+      : "The baseline has a stronger long/short spread. ";
+  } else {
+    summary += "The economic spread is similar. ";
+  }
+
+  summary += `Compared to ${label}, the difference is ${Math.abs(icDiff).toFixed(3)} in IC and ${Math.abs(spreadDiff).toFixed(3)} in spread.`;
+
+  return summary;
+}
+
+function generateDecisionInsight(result: any, input: string): string | null {
+  if (!result) return null;
+
+  const q = input.toLowerCase();
+
+  if (
+    !q.includes("should") &&
+    !q.includes("trade") &&
+    !q.includes("good") &&
+    !q.includes("worth") &&
+    !q.includes("invest")
+  ) {
+    return null;
+  }
+
+  const sections = result.sections || [];
+
+  const predictive = sections.find((s: any) => s.title === "Predictive Power")?.content;
+  const quant = sections.find((s: any) => s.title === "Quantile Analysis")?.content;
+  const stability = sections.find((s: any) => s.title === "Stability")?.content;
+  const factor = sections.find((s: any) => s.title === "Factor Decomposition")?.content;
+
+  if (!predictive || !quant || !stability || !factor) return null;
+
+  const ic = predictive.ic;
+  const spread = quant.spread;
+  const csStd = stability.cs_ic_std;
+  const alpha = factor.alpha;
+
+  let score = 0;
+
+  if (Math.abs(ic) > 0.05) score += 1;
+  if (Math.abs(ic) > 0.1) score += 1;
+
+  if (Math.abs(spread) > 0.02) score += 1;
+  if (Math.abs(spread) > 0.05) score += 1;
+
+  if (csStd < 0.2) score += 1;
+
+  if (Math.abs(alpha) > 0.01) score += 1;
+
+  let verdict = "";
+  const reasoning: string[] = [];
+
+  if (score >= 5) {
+    verdict = "This looks like a strong signal.";
+  } else if (score >= 3) {
+    verdict = "This signal shows some promise, but is not particularly strong.";
+  } else {
+    verdict = "This signal appears weak or unreliable.";
+  }
+
+  if (Math.abs(ic) > 0.1) {
+    reasoning.push("It has meaningful predictive power.");
+  } else {
+    reasoning.push("Predictive power is weak.");
+  }
+
+  if (Math.abs(spread) > 0.05) {
+    reasoning.push("The long/short spread is economically meaningful.");
+  } else {
+    reasoning.push("The spread is small, limiting profitability.");
+  }
+
+  if (csStd < 0.2) {
+    reasoning.push("The signal appears relatively stable.");
+  } else {
+    reasoning.push("The signal is unstable across periods.");
+  }
+
+  if (Math.abs(alpha) > 0.01) {
+    reasoning.push("There is some evidence of independent alpha.");
+  } else {
+    reasoning.push("Returns are mostly explained by factor exposure.");
+  }
+
+  return `${verdict} ${reasoning.join(" ")}`;
+}
+
+function generateIntrospectionAnswer(
+  introspection: any,
+  input: string
+): string | null {
+  if (!introspection) return null;
+
+  const q = input.toLowerCase();
+
+  const data = introspection.details?.data;
+  const methodology = introspection.details?.methodology;
+
+  if (!data) return null;
+
+  if (q.includes("data") || q.includes("dataset")) {
+    return introspection.summary;
+  }
+
+  if (q.includes("rows") || q.includes("observations")) {
+    return `The analysis used ${data.output_rows} observations after dropping ${data.rows_dropped} rows during alignment.`;
+  }
+
+  if (q.includes("dropped")) {
+    return `${data.rows_dropped} rows were dropped due to alignment (signal_t → return_t+1).`;
+  }
+
+  if (q.includes("assets")) {
+    return `The signal covered ${data.unique_assets} assets.`;
+  }
+
+  if (q.includes("date") || q.includes("range")) {
+    return `The data spans from ${data.date_range.start} to ${data.date_range.end}.`;
+  }
+
+  if (q.includes("align")) {
+    return methodology?.alignment || null;
+  }
+
+  if (q.includes("clean")) {
+    return methodology?.cleaning || null;
+  }
+
+  if (q.includes("method") || q.includes("compute")) {
+    return `The system computes IC, rank IC, quantile spreads, and performs regression-based factor decomposition.`;
+  }
+
+  return null;
 }
 
 function generateRiskInsight(report: any, query: string): string | null {
@@ -393,6 +563,8 @@ export default function SignalScopeDemoPage() {
   const [lastSource, setLastSource] = useState<string | null>(null);
   const [previousSource, setPreviousSource] = useState<string | null>(null);
   const [lastResult, setLastResult] = useState<any>(null);
+  const [lastComparison, setLastComparison] = useState<any | null>(null);
+  const [customSignal, setCustomSignal] = useState<string>("");
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -412,7 +584,31 @@ export default function SignalScopeDemoPage() {
     setInput("");
     setLoading(true);
 
-    if (normalized === "yes" || normalized.includes("compare")) {
+    const q = input.toLowerCase().trim();
+
+    if (q.startsWith("compare")) {
+      if (!lastResult) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "No signal to compare. Analyze a signal first." },
+        ]);
+        setLoading(false);
+        return;
+      }
+      const baselineSource = q.includes("momentum") ? "momentum" : "random";
+      const baseline = await executeAction({ action: "analyze_signal", source: baselineSource });
+      const comparison = generateComparisonInsight(lastResult, baseline, baselineSource);
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: input },
+        { role: "assistant", content: comparison },
+      ]);
+      setLastComparison({ current: lastResult, baseline });
+      setLoading(false);
+      return;
+    }
+
+    if (normalized === "yes") {
       try {
         const result = await executeAction({
           action: "analyze_signal",
@@ -436,14 +632,13 @@ export default function SignalScopeDemoPage() {
           role: "assistant",
           content:
             formatReport(result) +
-            (suggestion ? `\n\n→ ${suggestion}` : ""),
+            (suggestion ? `\n\n\u2192 ${suggestion}` : ""),
+          _introspection: result._introspection,
         };
-
         setMessages((prev) => [...prev, assistantMessage]);
       } catch (err) {
         setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: "Error running comparison." },
+          ...prev,          { role: "assistant", content: "Error running comparison." },
         ]);
       } finally {
         setLoading(false);
@@ -456,6 +651,32 @@ export default function SignalScopeDemoPage() {
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: generateLimitResponse(input) },
+      ]);
+      setLoading(false);
+      return;
+    }
+
+    const introspectionAnswer = generateIntrospectionAnswer(
+      lastResult?._introspection,
+      input
+    );
+
+    if (introspectionAnswer) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: introspectionAnswer },
+      ]);
+      setLoading(false);
+      return;
+    }
+
+    const decisionAnswer = generateDecisionInsight(lastResult, input);
+
+    if (decisionAnswer) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "user", content: input },
+        { role: "assistant", content: decisionAnswer },
       ]);
       setLoading(false);
       return;
@@ -526,7 +747,8 @@ export default function SignalScopeDemoPage() {
         role: "assistant",
         content:
           formatReport(result) +
-          (suggestion ? `\n\n→ ${suggestion}` : ""),
+          (suggestion ? `\n\n\u2192 ${suggestion}` : ""),
+        _introspection: result._introspection,
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
@@ -570,6 +792,20 @@ export default function SignalScopeDemoPage() {
               >
                 {msg.content}
               </div>
+              {msg._introspection && (
+                <div className="mt-2 px-3 py-2 rounded-md border border-neutral-800 bg-neutral-950 text-xs text-neutral-400 max-w-prose">
+                  <div className="font-medium text-neutral-300 mb-1">How this was computed</div>
+                  <div className="mb-2">{msg._introspection.summary}</div>
+                  <details>
+                    <summary className="cursor-pointer text-neutral-500 hover:text-neutral-300">
+                      Show details
+                    </summary>
+                    <pre className="mt-2 whitespace-pre-wrap text-neutral-500">
+                      {JSON.stringify(msg._introspection.details, null, 2)}
+                    </pre>
+                  </details>
+                </div>
+              )}
             </div>
           ))}
           {loading && (
@@ -602,6 +838,58 @@ export default function SignalScopeDemoPage() {
             Send
           </button>
         </form>
+
+        <div className="mt-6 border-t border-neutral-800 pt-5">
+          <div className="text-xs text-neutral-500 font-medium mb-2">Paste custom signal (JSON)</div>
+          <textarea
+            value={customSignal}
+            onChange={(e) => setCustomSignal(e.target.value)}
+            placeholder={'[{"date":"2020-01-01","asset":"ASSET_000","signal":0.5}]'}
+            className="w-full h-28 px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-md text-xs font-mono text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none"
+          />
+          <button
+            disabled={loading || !customSignal.trim()}
+            onClick={async () => {
+              let parsed: any[];
+              try {
+                parsed = JSON.parse(customSignal);
+              } catch {
+                setMessages((prev) => [
+                  ...prev,
+                  { role: "assistant", content: "Invalid JSON format for signal." },
+                ]);
+                return;
+              }
+              setLoading(true);
+              try {
+                const result = await executeAction({ action: "analyze_signal", signal: parsed });
+                setLastResult(result);
+                const suggestion = generateSuggestion(result, "custom", lastSource);
+                setMessages((prev) => [
+                  ...prev,
+                  { role: "user", content: "analyze custom signal" },
+                  {
+                    role: "assistant",
+                    content: formatReport(result) + (suggestion ? `\n\n\u2192 ${suggestion}` : ""),
+                    _introspection: result._introspection,
+                  },
+                ]);
+                setPreviousSource(lastSource);
+                setLastSource("custom");
+              } catch (err) {
+                setMessages((prev) => [
+                  ...prev,
+                  { role: "assistant", content: "Error analyzing custom signal." },
+                ]);
+              } finally {
+                setLoading(false);
+              }
+            }}
+            className="mt-2 px-4 py-2 bg-neutral-700 text-white text-sm rounded-md hover:bg-neutral-600 transition disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            Analyze Custom Signal
+          </button>
+        </div>
       </div>
     </main>
   );
