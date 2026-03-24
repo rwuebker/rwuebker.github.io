@@ -125,6 +125,7 @@ function generateComparisonInsight(current: any, baseline: any, label: string): 
 
   const curPred = getSection(current, "Predictive Power");
   const basePred = getSection(baseline, "Predictive Power");
+
   const curQuant = getSection(current, "Quantile Analysis");
   const baseQuant = getSection(baseline, "Quantile Analysis");
 
@@ -135,25 +136,36 @@ function generateComparisonInsight(current: any, baseline: any, label: string): 
   const icDiff = curPred.ic - basePred.ic;
   const spreadDiff = curQuant.spread - baseQuant.spread;
 
-  let summary = "";
+  const labelName = label === "momentum"
+    ? "momentum signal"
+    : "random signal";
 
-  if (Math.abs(icDiff) > 0.05) {
+  const absIcDiff = Math.abs(icDiff);
+  const absSpreadDiff = Math.abs(spreadDiff);
+
+  let summary = `Relative to the ${labelName}, the provided signal is `;
+
+  if (absIcDiff > 0.05 || absSpreadDiff > 0.05) {
     summary += icDiff > 0
-      ? "The current signal has stronger predictive power than the baseline. "
-      : "The baseline has stronger predictive power than the current signal. ";
+      ? `stronger, with higher predictive power (IC)`
+      : `weaker, with lower predictive power (IC)`;
   } else {
-    summary += "Predictive power is similar between the two signals. ";
+    summary += `similar in strength`;
   }
 
-  if (Math.abs(spreadDiff) > 0.05) {
+  if (absSpreadDiff > 0.05) {
     summary += spreadDiff > 0
-      ? "It also has a stronger long/short spread. "
-      : "The baseline has a stronger long/short spread. ";
+      ? ` and a stronger long/short spread. `
+      : ` and a weaker long/short spread. `;
   } else {
-    summary += "The economic spread is similar. ";
+    summary += `. `;
   }
 
-  summary += `Compared to ${label}, the difference is ${Math.abs(icDiff).toFixed(3)} in IC and ${Math.abs(spreadDiff).toFixed(3)} in spread.`;
+  summary += `The IC difference is ${absIcDiff.toFixed(3)} and the spread difference is ${absSpreadDiff.toFixed(3)}.`;
+
+  if (curQuant.spread < 0) {
+    summary += ` The provided signal appears inversely predictive (negative spread), so a flipped long/short construction may be more appropriate.`;
+  }
 
   return summary;
 }
@@ -396,24 +408,40 @@ function generatePnLInsight(report: any, query: string): string | null {
 
     if (!quant) return "No data available.";
 
-    const spread = quant.spread;
+    const spread = quant.spread ?? 0;
+    const absSpread = Math.abs(spread);
     const stabilityScore = stability?.cs_ic_std ?? 1;
 
-    return `PnL Intuition:
+    let response = "PnL Intuition:\n\n";
 
-The long/short spread of ${spread.toFixed(4)} represents the expected return differential between top and bottom signals.
+    response += `The reported spread is defined as (Q5 − Q1), where Q5 is the top signal quantile (long leg) and Q1 is the bottom quantile (short leg).\n\n`;
 
-This implies ${
-      spread > 0.1
-        ? "strong potential profitability for a market-neutral strategy."
-        : "limited profitability and weak economic signal."
+    response += `Observed spread: Q5 − Q1 = ${spread.toFixed(4)}\n\n`;
+
+    if (absSpread > 0.05) {
+      response += `The magnitude (|spread| = ${absSpread.toFixed(4)}) suggests economically meaningful separation between long and short portfolios.\n\n`;
+    } else {
+      response += `The magnitude (|spread| = ${absSpread.toFixed(4)}) is small, suggesting limited economic value.\n\n`;
     }
 
-${
-  stabilityScore < 0.1
-    ? "The low variability in IC suggests returns would likely be consistent over time."
-    : "High variability in IC suggests returns may be unstable and regime-dependent."
-}`;
+    if (spread < 0) {
+      response += `Because the spread is negative, the signal is inversely predictive under the standard construction (long Q5, short Q1).\n`;
+      response += `A flipped strategy (long Q1, short Q5) would align positions with the signal and capture the return differential.\n\n`;
+    } else {
+      response += `The positive spread indicates that the standard construction (long Q5, short Q1) aligns with the signal.\n\n`;
+    }
+
+    if (stabilityScore === 0) {
+      response += "IC shows no variation over time in this sample, so stability cannot be reliably assessed.\n\n";
+    } else if (stabilityScore < 0.1) {
+      response += "The signal appears relatively stable over time.\n\n";
+    } else {
+      response += "IC variability is elevated, suggesting returns may be unstable and regime-dependent.\n\n";
+    }
+
+    response += "Net profitability will depend on implementation costs, turnover, and execution.";
+
+    return response;
   }
 
   return null;
@@ -512,8 +540,10 @@ Mean IC: ${stability.cs_ic_mean.toFixed(4)}
 Std Dev: ${stability.cs_ic_std.toFixed(4)}
 
 This indicates ${
-      stability.cs_ic_std < 0.1
-        ? "highly consistent performance over time."
+      stability.cs_ic_std === 0
+        ? "no IC variation in this sample — stability cannot be reliably assessed."
+        : stability.cs_ic_std < 0.1
+        ? "relatively stable performance over time."
         : "unstable and inconsistent performance."
     }`;
   }
@@ -600,7 +630,6 @@ export default function SignalScopeDemoPage() {
       const comparison = generateComparisonInsight(lastResult, baseline, baselineSource);
       setMessages((prev) => [
         ...prev,
-        { role: "user", content: input },
         { role: "assistant", content: comparison },
       ]);
       setLastComparison({ current: lastResult, baseline });
@@ -675,7 +704,6 @@ export default function SignalScopeDemoPage() {
     if (decisionAnswer) {
       setMessages((prev) => [
         ...prev,
-        { role: "user", content: input },
         { role: "assistant", content: decisionAnswer },
       ]);
       setLoading(false);
