@@ -10,12 +10,13 @@ export function getLastReport(): any {
 
 export async function askQuestion(
   question: string,
-  report: any
+  report: any,
+  section?: string
 ): Promise<AskResponse> {
   const response = await fetch(`${SIGNALSCOPE_API_BASE}/analyze/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ question, report }),
+    body: JSON.stringify({ question, report, ...(section ? { section } : {}) }),
   });
 
   if (!response.ok) {

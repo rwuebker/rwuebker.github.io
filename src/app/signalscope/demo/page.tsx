@@ -6,13 +6,20 @@ import { executeAction, getLastReport, askQuestion } from "@/lib/signalscope/act
 import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
 import type { AskResponse } from "@/lib/signalscope/types";
 
+interface Citation {
+  concept: string;
+  definition?: string;
+  assumptions?: string[];
+  failure_modes?: string[];
+}
+
 interface Message {
   role: "user" | "assistant";
   content: string;
   ui_components?: any[];
   clarification?: AskResponse["clarification"];
   section?: string;
-  citations?: string[];
+  citations?: Citation[];
   _introspection?: {
     summary: string;
     details: Record<string, any>;
@@ -523,19 +530,66 @@ function cleanAnswerText(text: string): string {
     .trim();
 }
 
-function renderCitations(citations: any[] | undefined) {
+function CitationList({ citations }: { citations: Citation[] | undefined }) {
+  const [expanded, setExpanded] = useState<string | null>(null);
+
   if (!Array.isArray(citations) || citations.length === 0) return null;
   return (
-    <div className="text-xs text-neutral-500 mt-2">
-      <div className="font-medium text-neutral-400">Sources:</div>
-      <ul className="list-disc ml-4">
-        {citations.map((c, i) => {
-          if (typeof c === "string") return <li key={i}>{c}</li>;
-          if (typeof c === "object" && c !== null)
-            return <li key={i}>{c.concept || c.title || "Unknown source"}</li>;
-          return <li key={i}>Unknown</li>;
-        })}
-      </ul>
+    <div className="mt-3 space-y-1" style={{ contain: "layout" }}>
+      <div className="text-xs font-medium text-neutral-400">Sources:</div>
+      {citations.map((c, i) => {
+        const concept = typeof c === "string" ? c : (c.concept || "Unknown source");
+        const isExpanded = expanded === concept;
+        const hasDetail =
+          typeof c === "object" &&
+          (c.definition || c.assumptions?.length || c.failure_modes?.length);
+        return (
+          <div key={i} className="text-xs">
+            <button
+              tabIndex={-1}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => setExpanded(isExpanded ? null : concept)}
+              className={`text-left flex items-center gap-1 ${
+                hasDetail
+                  ? "text-neutral-400 hover:text-neutral-200 cursor-pointer"
+                  : "text-neutral-500 cursor-default"
+              } transition`}
+            >
+              <span
+                className={`inline-block w-3 text-neutral-600 transition-transform ${
+                  isExpanded ? "rotate-90" : ""
+                }`}
+              >
+                {hasDetail ? "›" : "·"}
+              </span>
+              {concept}
+            </button>
+            {typeof c === "object" && (
+              <div className={`citation-content${isExpanded ? " open" : ""} ml-4 space-y-2 text-neutral-400 border-l border-neutral-800 pl-3`}>
+                {c.definition && (
+                  <p className="leading-relaxed">{c.definition}</p>
+                )}
+                {c.assumptions && c.assumptions.length > 0 && (
+                  <div>
+                    <div className="font-medium text-neutral-500 mb-0.5">Assumptions:</div>
+                    <ul className="list-disc ml-4 space-y-0.5">
+                      {c.assumptions.map((a, j) => <li key={j}>{a}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {c.failure_modes && c.failure_modes.length > 0 && (
+                  <div>
+                    <div className="font-medium text-neutral-500 mb-0.5">Failure modes:</div>
+                    <ul className="list-disc ml-4 space-y-0.5">
+                      {c.failure_modes.map((f, j) => <li key={j}>{f}</li>)}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -610,7 +664,7 @@ function renderContent(content: any) {
 }
 
 function renderAskResponse(
-  resp: { answer?: string; section?: string; citations?: any[] } | undefined
+  resp: { answer?: string; section?: string; citations?: Citation[] } | undefined
 ) {
   if (!resp) return null;
   console.log("ASK RAW ANSWER:", resp.answer);
@@ -625,14 +679,15 @@ function renderAskResponse(
           From: {resp.section.replace(/_/g, " ")}
         </div>
       )}
-      {renderCitations(resp.citations)}
+      <CitationList citations={resp.citations} />
     </div>
   );
 }
 
 function renderSection(
   section: any,
-  handleAsk: (q: string) => void
+  handleAsk: (q: string, sectionId?: string) => void,
+  setActiveSection: (id: string | null) => void
 ) {
   return (
     <div
@@ -641,13 +696,16 @@ function renderSection(
     >
       <div className="font-semibold text-sm text-neutral-200">{section.title}</div>
       {section.details?.content != null && renderContent(section.details.content)}
-      {renderCitations(section.citations)}
+      <CitationList citations={section.citations} />
       {section.ask && section.ask.length > 0 && (
         <div className="flex flex-wrap gap-2 pt-1">
           {section.ask.map((q: string, i: number) => (
             <button
               key={i}
-              onClick={() => handleAsk(q)}
+              onClick={() => {
+                setActiveSection(section.id ?? null);
+                handleAsk(q, section.id);
+              }}
               className="text-xs px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-700 transition"
             >
               {q}
@@ -671,16 +729,26 @@ export default function SignalScopeDemoPage() {
   const [lastComparison, setLastComparison] = useState<any | null>(null);
   const [customSignal, setCustomSignal] = useState<string>("");
   const [pendingClarification, setPendingClarification] = useState<AskResponse["clarification"] | null>(null);
+  const [activeSection, setActiveSection] = useState<string | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  const prevMessageCountRef = useRef(0);
 
   useEffect(() => {
-    chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages, loading]);
+    const prev = prevMessageCountRef.current;
+    const current = messages.length;
+    if (current > prev) {
+      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevMessageCountRef.current = current;
+  }, [messages]);
 
-  async function handleAsk(question: string) {
+  async function handleAsk(question: string, section?: string) {
     const report = getLastReport();
     if (!report) return;
+
+    const resolvedSection = section ?? activeSection ?? undefined;
+    if (section) setActiveSection(section);
 
     setLoading(true);
     setMessages((prev) => [
@@ -689,7 +757,7 @@ export default function SignalScopeDemoPage() {
     ]);
 
     try {
-      const data = await askQuestion(question, report);
+      const data = await askQuestion(question, report, resolvedSection);
 
       if (data.clarification != null) {
         setPendingClarification(data.clarification);
@@ -702,17 +770,17 @@ export default function SignalScopeDemoPage() {
           },
         ]);
       } else {
-        const parts: string[] = [];
-        if (data.answer) parts.push(data.answer);
-        if (data.section) parts.push(`Section: ${data.section}`);
-        if (data.citations?.length) parts.push(`Sources: ${data.citations.join(", ")}`);
+        const answer = data.answer ?? "";
+        const normCitations: Citation[] = (data.citations ?? []).map((c: any) =>
+          typeof c === "string" ? { concept: c } : c
+        );
         setMessages((prev) => [
           ...prev,
           {
             role: "assistant",
-            content: parts.join("\n\n"),
+            content: answer,
             section: data.section,
-            citations: data.citations,
+            citations: normCitations,
           },
         ]);
       }
@@ -878,7 +946,7 @@ export default function SignalScopeDemoPage() {
     }
 
     try {
-      const route = await routeUserInput(userMessage.content);
+      const route = await routeUserInput(userMessage.content, activeSection ?? undefined);
 
       // --- Ask response (Q&A via /analyze/ask) ---
       if (route.type === "ask") {
@@ -895,19 +963,17 @@ export default function SignalScopeDemoPage() {
             },
           ]);
         } else {
-          const parts: string[] = [];
-          if (askResponse.answer) parts.push(askResponse.answer);
-          if (askResponse.section) parts.push(`Section: ${askResponse.section}`);
-          if (askResponse.citations?.length) {
-            parts.push(`Sources: ${askResponse.citations.join(", ")}`);
-          }
+          const answer = askResponse.answer ?? "";
+          const normCitations: Citation[] = (askResponse.citations ?? []).map((c: any) =>
+            typeof c === "string" ? { concept: c } : c
+          );
           setMessages((prev) => [
             ...prev,
             {
               role: "assistant",
-              content: parts.join("\n\n"),
+              content: answer,
               section: askResponse.section,
-              citations: askResponse.citations,
+              citations: normCitations,
             },
           ]);
         }
@@ -957,7 +1023,7 @@ export default function SignalScopeDemoPage() {
           signal&quot;
         </p>
 
-        <div className="flex flex-col gap-4 mb-6 min-h-[300px]">
+        <div className="flex flex-col gap-4 mb-6 min-h-[300px] overflow-anchor-none" style={{ overflowAnchor: "none" }}>
           {messages.length === 0 && (
             <p className="text-neutral-600 text-sm">No messages yet.</p>
           )}
@@ -999,10 +1065,10 @@ export default function SignalScopeDemoPage() {
                   )}
                   {msg.ui_components
                     .filter((s: any) => s.id === "llm_interpretation")
-                    .map((s: any) => renderSection(s, handleAsk))}
+                    .map((s: any) => renderSection(s, handleAsk, setActiveSection))}
                   {msg.ui_components
                     .filter((s: any) => s.id !== "llm_interpretation")
-                    .map((s: any) => renderSection(s, handleAsk))}
+                    .map((s: any) => renderSection(s, handleAsk, setActiveSection))}
                 </div>
               )}
               {msg._introspection && (

@@ -24,3 +24,15 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+
+.citation-content {
+  max-height: 0;
+  overflow: hidden;
+  padding-top: 0;
+  transition: max-height 0.25s ease, padding-top 0.2s ease;
+}
+
+.citation-content.open {
+  max-height: 500px;
+  padding-top: 8px;
+}

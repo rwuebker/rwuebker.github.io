@@ -6,13 +6,16 @@ export type RouteResult =
   | { type: "action"; action: string; source?: string }
   | { type: "ask"; askResponse: AskResponse };
 
-export async function routeUserInput(message: string): Promise<RouteResult> {
+export async function routeUserInput(
+  message: string,
+  section?: string
+): Promise<RouteResult> {
   const lastReport = getLastReport();
 
   // If a report is loaded, route through /analyze/ask first.
   if (lastReport) {
     try {
-      const askResponse = await askQuestion(message, lastReport);
+      const askResponse = await askQuestion(message, lastReport, section);
       // If the backend returned a meaningful answer or clarification, use it.
       if (askResponse.answer != null || askResponse.clarification != null) {
         return { type: "ask", askResponse };
