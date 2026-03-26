@@ -5,6 +5,16 @@ export interface IntentAction {
   signal?: any[];
 }
 
+export interface AskResponse {
+  answer?: string;
+  section?: string;
+  citations?: string[];
+  clarification?: {
+    message: string;
+    options: string[];
+  };
+}
+
 export interface SignalScopeReport {
   interpretation: string;
   metrics: {

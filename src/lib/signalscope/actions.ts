@@ -1,8 +1,29 @@
-import { IntentAction, SignalScopeReport } from "./types";
+import { IntentAction, SignalScopeReport, AskResponse } from "./types";
 import { SIGNALSCOPE_API_BASE } from "./config";
 
 // Module-level cache; replaced by session state in a future iteration.
-let lastResult: SignalScopeReport | null = null;
+let lastReport: any = null;
+
+export function getLastReport(): any {
+  return lastReport;
+}
+
+export async function askQuestion(
+  question: string,
+  report: any
+): Promise<AskResponse> {
+  const response = await fetch(`${SIGNALSCOPE_API_BASE}/analyze/ask`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ question, report }),
+  });
+
+  if (!response.ok) {
+    throw new Error(`SignalScope ask error: ${response.status}`);
+  }
+
+  return response.json();
+}
 
 export async function executeAction(
   intent: IntentAction
@@ -28,15 +49,15 @@ export async function executeAction(
     }
 
     const result: SignalScopeReport = await response.json();
-    lastResult = result;
+    lastReport = result;
     return result;
   }
 
   if (intent.action === "explain_last_result") {
-    if (!lastResult) {
+    if (!lastReport) {
       throw new Error("No previous result to explain.");
     }
-    return lastResult;
+    return lastReport;
   }
 
   throw new Error(`Unknown action: ${intent.action}`);

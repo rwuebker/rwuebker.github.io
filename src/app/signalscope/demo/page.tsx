@@ -2,12 +2,17 @@
 
 import { useState, useEffect, useRef } from "react";
 import { routeUserInput } from "@/lib/signalscope/router";
-import { executeAction } from "@/lib/signalscope/actions";
+import { executeAction, getLastReport, askQuestion } from "@/lib/signalscope/actions";
 import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
+import type { AskResponse } from "@/lib/signalscope/types";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
+  ui_components?: any[];
+  clarification?: AskResponse["clarification"];
+  section?: string;
+  citations?: string[];
   _introspection?: {
     summary: string;
     details: Record<string, any>;
@@ -39,84 +44,6 @@ function generateSuggestion(
 
   // fallback
   return "Want to analyze another signal or explore this one further?";
-}
-
-function formatReport(report: any): string {
-  const lines: string[] = [];
-
-  if (!report || !report.sections) {
-    return "Invalid report structure";
-  }
-
-  // Helper to get section by title
-  const getSection = (title: string) =>
-    report.sections.find((s: any) => s.title === title);
-
-  // LLM Interpretation
-  const interpretation = getSection("LLM Interpretation");
-  if (interpretation?.content) {
-    lines.push(`Interpretation: ${interpretation.content}`);
-  }
-
-  // Predictive Power
-  const predictive = getSection("Predictive Power");
-  if (predictive?.content) {
-    const ic = predictive.content.ic;
-    const rankIc = predictive.content.rank_ic;
-
-    if (typeof ic === "number") {
-      lines.push(`IC: ${ic.toFixed(4)}`);
-    }
-
-    if (typeof rankIc === "number") {
-      lines.push(`Rank IC: ${rankIc.toFixed(4)}`);
-    }
-  }
-
-  // Quantile Analysis
-  const quantile = getSection("Quantile Analysis");
-  if (quantile?.content) {
-    const spread = quantile.content.spread;
-    if (typeof spread === "number") {
-      lines.push(`Spread: ${spread.toFixed(4)}`);
-    }
-
-    if (quantile.content.monotonic !== undefined) {
-      lines.push(`Monotonic: ${quantile.content.monotonic ? "Yes" : "No"}`);
-    }
-  }
-
-  // Stability
-  const stability = getSection("Stability");
-  if (stability?.content) {
-    const mean = stability.content.cs_ic_mean;
-    const std = stability.content.cs_ic_std;
-
-    if (typeof mean === "number") {
-      lines.push(`CS IC Mean: ${mean.toFixed(4)}`);
-    }
-
-    if (typeof std === "number") {
-      lines.push(`CS IC Std: ${std.toFixed(4)}`);
-    }
-  }
-
-  // Factor Decomposition
-  const factor = getSection("Factor Decomposition");
-  if (factor?.content) {
-    const beta = factor.content.beta;
-    const alpha = factor.content.alpha;
-
-    if (typeof beta === "number") {
-      lines.push(`Beta: ${beta.toFixed(4)}`);
-    }
-
-    if (typeof alpha === "number") {
-      lines.push(`Alpha: ${alpha.toFixed(4)}`);
-    }
-  }
-
-  return lines.join("\n");
 }
 
 function generateComparisonInsight(current: any, baseline: any, label: string): string {
@@ -584,6 +511,154 @@ This suggests ${
   return null;
 }
 
+function cleanAnswerText(text: string): string {
+  if (!text) return "";
+  // Only strip lines that are purely backend metadata
+  return text
+    .replace(/^Sources:\s*\[object Object\].*$/gim, "")
+    .replace(/^Sources:\s*.*$/gim, "")
+    .replace(/^Section:\s*\S+\s*$/gim, "")
+    .replace(/[ \t]+$/gm, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function renderCitations(citations: any[] | undefined) {
+  if (!Array.isArray(citations) || citations.length === 0) return null;
+  return (
+    <div className="text-xs text-neutral-500 mt-2">
+      <div className="font-medium text-neutral-400">Sources:</div>
+      <ul className="list-disc ml-4">
+        {citations.map((c, i) => {
+          if (typeof c === "string") return <li key={i}>{c}</li>;
+          if (typeof c === "object" && c !== null)
+            return <li key={i}>{c.concept || c.title || "Unknown source"}</li>;
+          return <li key={i}>Unknown</li>;
+        })}
+      </ul>
+    </div>
+  );
+}
+
+function renderContent(content: any) {
+  if (content == null) return null;
+  if (typeof content === "string") {
+    return <p className="text-sm leading-relaxed text-neutral-300">{content}</p>;
+  }
+  if (typeof content === "object") {
+    return (
+      <div className="space-y-2 text-sm text-neutral-300">
+        {Object.entries(content).map(([key, value]) => {
+          // quantiles array — special rendering
+          if (key === "quantiles" && Array.isArray(value)) {
+            return (
+              <div key={key}>
+                <div className="font-medium capitalize text-neutral-400">Quantiles:</div>
+                <div className="ml-2 space-y-0.5">
+                  {(value as any[]).map((q: any, i: number) => (
+                    <div key={i}>
+                      Q{q.quantile}: {typeof q.mean_return === "number" ? q.mean_return.toFixed(4) : String(q.mean_return)}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          }
+          if (typeof value === "number") {
+            return (
+              <div key={key}>
+                <span className="font-medium capitalize text-neutral-400">{key}:</span>{" "}
+                {(value as number).toFixed(4)}
+              </div>
+            );
+          }
+          if (typeof value === "boolean") {
+            return (
+              <div key={key}>
+                <span className="font-medium capitalize text-neutral-400">{key}:</span>{" "}
+                {value ? "Yes" : "No"}
+              </div>
+            );
+          }
+          if (Array.isArray(value)) {
+            return (
+              <div key={key}>
+                <span className="font-medium capitalize text-neutral-400">{key}:</span>{" "}
+                {JSON.stringify(value)}
+              </div>
+            );
+          }
+          if (value !== null && typeof value === "object") {
+            return (
+              <div key={key}>
+                <span className="font-medium capitalize text-neutral-400">{key}:</span>
+                <div className="ml-2">{renderContent(value)}</div>
+              </div>
+            );
+          }
+          return (
+            <div key={key}>
+              <span className="font-medium capitalize text-neutral-400">{key}:</span>{" "}
+              {String(value)}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+  return null;
+}
+
+function renderAskResponse(
+  resp: { answer?: string; section?: string; citations?: any[] } | undefined
+) {
+  if (!resp) return null;
+  console.log("ASK RAW ANSWER:", resp.answer);
+  const answer = cleanAnswerText(resp.answer ?? "");
+  return (
+    <div className="space-y-2 rounded-md border border-neutral-800 bg-neutral-950 px-4 py-3">
+      {answer && (
+        <p className="text-sm leading-relaxed text-neutral-300 whitespace-pre-wrap">{answer}</p>
+      )}
+      {resp.section && resp.section !== "full_report" && (
+        <div className="text-xs text-neutral-500">
+          From: {resp.section.replace(/_/g, " ")}
+        </div>
+      )}
+      {renderCitations(resp.citations)}
+    </div>
+  );
+}
+
+function renderSection(
+  section: any,
+  handleAsk: (q: string) => void
+) {
+  return (
+    <div
+      key={section.id ?? section.title}
+      className="rounded-md border border-neutral-800 bg-neutral-950 px-4 py-3 space-y-2"
+    >
+      <div className="font-semibold text-sm text-neutral-200">{section.title}</div>
+      {section.details?.content != null && renderContent(section.details.content)}
+      {renderCitations(section.citations)}
+      {section.ask && section.ask.length > 0 && (
+        <div className="flex flex-wrap gap-2 pt-1">
+          {section.ask.map((q: string, i: number) => (
+            <button
+              key={i}
+              onClick={() => handleAsk(q)}
+              className="text-xs px-2 py-1 rounded bg-neutral-800 border border-neutral-700 text-neutral-400 hover:text-neutral-200 hover:bg-neutral-700 transition"
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function SignalScopeDemoPage() {
   console.log("API BASE:", SIGNALSCOPE_API_BASE);
 
@@ -595,12 +670,61 @@ export default function SignalScopeDemoPage() {
   const [lastResult, setLastResult] = useState<any>(null);
   const [lastComparison, setLastComparison] = useState<any | null>(null);
   const [customSignal, setCustomSignal] = useState<string>("");
+  const [pendingClarification, setPendingClarification] = useState<AskResponse["clarification"] | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, loading]);
+
+  async function handleAsk(question: string) {
+    const report = getLastReport();
+    if (!report) return;
+
+    setLoading(true);
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", content: question },
+    ]);
+
+    try {
+      const data = await askQuestion(question, report);
+
+      if (data.clarification != null) {
+        setPendingClarification(data.clarification);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: data.clarification!.message,
+            clarification: data.clarification,
+          },
+        ]);
+      } else {
+        const parts: string[] = [];
+        if (data.answer) parts.push(data.answer);
+        if (data.section) parts.push(`Section: ${data.section}`);
+        if (data.citations?.length) parts.push(`Sources: ${data.citations.join(", ")}`);
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: parts.join("\n\n"),
+            section: data.section,
+            citations: data.citations,
+          },
+        ]);
+      }
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Error answering question." },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -659,9 +783,8 @@ export default function SignalScopeDemoPage() {
 
         const assistantMessage: Message = {
           role: "assistant",
-          content:
-            formatReport(result) +
-            (suggestion ? `\n\n\u2192 ${suggestion}` : ""),
+          content: suggestion ? `\u2192 ${suggestion}` : "",
+          ui_components: result.ui_components,
           _introspection: result._introspection,
         };
         setMessages((prev) => [...prev, assistantMessage]);
@@ -756,6 +879,42 @@ export default function SignalScopeDemoPage() {
 
     try {
       const route = await routeUserInput(userMessage.content);
+
+      // --- Ask response (Q&A via /analyze/ask) ---
+      if (route.type === "ask") {
+        const { askResponse } = route;
+
+        if (askResponse.clarification != null) {
+          setPendingClarification(askResponse.clarification);
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: askResponse.clarification!.message,
+              clarification: askResponse.clarification,
+            },
+          ]);
+        } else {
+          const parts: string[] = [];
+          if (askResponse.answer) parts.push(askResponse.answer);
+          if (askResponse.section) parts.push(`Section: ${askResponse.section}`);
+          if (askResponse.citations?.length) {
+            parts.push(`Sources: ${askResponse.citations.join(", ")}`);
+          }
+          setMessages((prev) => [
+            ...prev,
+            {
+              role: "assistant",
+              content: parts.join("\n\n"),
+              section: askResponse.section,
+              citations: askResponse.citations,
+            },
+          ]);
+        }
+        return;
+      }
+
+      // --- Action response (analyze_signal etc.) ---
       const result = await executeAction(route);
 
       setLastResult(result);
@@ -773,9 +932,8 @@ export default function SignalScopeDemoPage() {
 
       const assistantMessage: Message = {
         role: "assistant",
-        content:
-          formatReport(result) +
-          (suggestion ? `\n\n\u2192 ${suggestion}` : ""),
+        content: suggestion ? `\u2192 ${suggestion}` : "",
+        ui_components: result.ui_components,
         _introspection: result._introspection,
       };
       setMessages((prev) => [...prev, assistantMessage]);
@@ -811,15 +969,42 @@ export default function SignalScopeDemoPage() {
               <span className="text-xs text-neutral-500 block mb-1">
                 {msg.role === "user" ? "You" : "SignalScope"}
               </span>
-              <div
-                className={`inline-block px-4 py-3 rounded-md text-sm whitespace-pre-wrap max-w-prose ${
-                  msg.role === "user"
-                    ? "bg-neutral-800 text-neutral-100"
-                    : "bg-neutral-900 border border-neutral-800 text-neutral-200"
-                }`}
-              >
-                {msg.content}
-              </div>
+              {/* user bubble */}
+              {msg.role === "user" && (
+                <div className="inline-block px-4 py-3 rounded-md text-sm whitespace-pre-wrap max-w-prose bg-neutral-800 text-neutral-100">
+                  {msg.content}
+                </div>
+              )}
+              {/* assistant: ask response (has answer/citations but no ui_components) */}
+              {msg.role === "assistant" && !msg.ui_components?.length && (
+                <div className="max-w-2xl">
+                  {(msg.section != null || msg.citations?.length) ? (
+                    renderAskResponse({
+                      answer: msg.content || undefined,
+                      section: msg.section,
+                      citations: msg.citations,
+                    })
+                  ) : (
+                    <div className="inline-block px-4 py-3 rounded-md text-sm whitespace-pre-wrap max-w-prose bg-neutral-900 border border-neutral-800 text-neutral-200">
+                      {msg.content}
+                    </div>
+                  )}
+                </div>
+              )}
+              {/* assistant: report with ui_components */}
+              {msg.role === "assistant" && msg.ui_components && msg.ui_components.length > 0 && (
+                <div className="mt-1 max-w-2xl space-y-4">
+                  {msg.content && (
+                    <p className="text-sm text-neutral-400">{msg.content}</p>
+                  )}
+                  {msg.ui_components
+                    .filter((s: any) => s.id === "llm_interpretation")
+                    .map((s: any) => renderSection(s, handleAsk))}
+                  {msg.ui_components
+                    .filter((s: any) => s.id !== "llm_interpretation")
+                    .map((s: any) => renderSection(s, handleAsk))}
+                </div>
+              )}
               {msg._introspection && (
                 <div className="mt-2 px-3 py-2 rounded-md border border-neutral-800 bg-neutral-950 text-xs text-neutral-400 max-w-prose">
                   <div className="font-medium text-neutral-300 mb-1">How this was computed</div>
@@ -832,6 +1017,22 @@ export default function SignalScopeDemoPage() {
                       {JSON.stringify(msg._introspection.details, null, 2)}
                     </pre>
                   </details>
+                </div>
+              )}
+              {msg.clarification && (
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {msg.clarification.options.map((opt) => (
+                    <button
+                      key={opt}
+                      onClick={() => {
+                        setPendingClarification(null);
+                        handleAsk(opt);
+                      }}
+                      className="px-3 py-1.5 text-xs rounded-md bg-neutral-800 border border-neutral-700 text-neutral-300 hover:bg-neutral-700 transition"
+                    >
+                      {opt.replace(/_/g, " ")}
+                    </button>
+                  ))}
                 </div>
               )}
             </div>
@@ -898,7 +1099,8 @@ export default function SignalScopeDemoPage() {
                   { role: "user", content: "analyze custom signal" },
                   {
                     role: "assistant",
-                    content: formatReport(result) + (suggestion ? `\n\n\u2192 ${suggestion}` : ""),
+                    content: suggestion ? `\u2192 ${suggestion}` : "",
+                    ui_components: result.ui_components,
                     _introspection: result._introspection,
                   },
                 ]);
