@@ -1,6 +1,10 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import {
+  BarChart, Bar, XAxis, YAxis, Tooltip,
+  ScatterChart, Scatter, CartesianGrid, ResponsiveContainer,
+} from "recharts";
 import { routeUserInput } from "@/lib/signalscope/router";
 import { executeAction, getLastReport, askQuestion } from "@/lib/signalscope/actions";
 import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
@@ -11,6 +15,14 @@ interface Citation {
   definition?: string;
   assumptions?: string[];
   failure_modes?: string[];
+}
+
+interface SourceExplanation {
+  message?: string;
+  type?: string;
+  model?: string;
+  implications?: string[];
+  validation_checks?: string[];
 }
 
 interface Message {
@@ -24,6 +36,8 @@ interface Message {
     summary: string;
     details: Record<string, any>;
   };
+  source_explanation?: SourceExplanation;
+  data_preview?: Record<string, any>[];
 }
 
 function generateSuggestion(
@@ -33,24 +47,36 @@ function generateSuggestion(
 ): string | null {
   if (!report?.conclusion?.type) return null;
 
-  const type = report.conclusion.type;
+  const type: string = report.conclusion.type;
+  const source: string | null = lastSource;
 
-  // === CASE 1: Comparison just happened ===
-  if (previousSource === "momentum" && lastSource === "random") {
-    return "This comparison shows the original signal is much stronger than noise. Want to test its stability or explore residual alpha?";
+  // Normalise type string — backend may use various casings/separators
+  const t = type.toLowerCase().replace(/[-_ ]/g, "");
+
+  // === noise / random signal ===
+  if (t === "noise" || t.includes("noise")) {
+    return "This signal appears to be noise. Want to try improving the construction or test a different signal?";
   }
 
-  // === CASE 2: First-time analysis ===
-  if (type === "factor-driven") {
-    return "This looks factor-driven. Want to compare it to a random signal?";
+  // === factor-driven ===
+  if (t === "factor" || t.includes("factor")) {
+    if (source === "random") {
+      return "This random signal is dominated by factor exposure. Want to test a structured signal like momentum instead?";
+    }
+    return "This looks factor-driven. Want to compare it to a random signal or neutralize factor exposure?";
   }
 
-  if (type === "independent alpha") {
-    return "This may contain alpha. Want to test its stability or compare to random?";
+  // === alpha ===
+  if (t === "alpha" || t.includes("alpha")) {
+    return "This may contain alpha. Want to test its stability or validate it out-of-sample?";
   }
 
-  // fallback
-  return "Want to analyze another signal or explore this one further?";
+  // === comparison just ran (previous context still useful) ===
+  if (previousSource && lastSource && previousSource !== lastSource) {
+    return `Comparison complete. Want to explore the ${lastSource} signal further or test a new one?`;
+  }
+
+  return "Want to explore this signal further?";
 }
 
 function generateComparisonInsight(current: any, baseline: any, label: string): string {
@@ -530,6 +556,213 @@ function cleanAnswerText(text: string): string {
     .trim();
 }
 
+function DataOverview({ msg }: { msg: Message }) {
+  const src = msg.source_explanation;
+  const rows = Array.isArray(msg.data_preview) ? msg.data_preview.slice(0, 10) : [];
+  if (!src?.message && rows.length === 0) return null;
+
+  const allCols = ["date", "asset", "signal", "return"];
+  const cols = rows.length > 0
+    ? allCols.filter((k) => k in rows[0])
+    : [];
+
+  return (
+    <div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-3 space-y-3">
+      <h3 className="text-sm font-semibold text-neutral-200">Data Overview</h3>
+
+      {src?.message && (
+        <div className="space-y-1">
+          <div className="text-xs font-medium text-neutral-400">Data Source</div>
+          <p className="text-xs text-neutral-300 leading-relaxed">{src.message}</p>
+          {src.type === "synthetic" && (
+            <div className="mt-1 space-y-0.5 text-xs text-neutral-500">
+              {src.model && (
+                <div><span className="text-neutral-400">Model:</span> {src.model}</div>
+              )}
+              {src.implications && src.implications.length > 0 && (
+                <div>
+                  <span className="text-neutral-400">Implications:</span>
+                  <ul className="list-disc ml-4 mt-0.5 space-y-0.5">
+                    {src.implications.map((imp, i) => <li key={i}>{imp}</li>)}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+          {src.type === "user" && src.validation_checks && src.validation_checks.length > 0 && (
+            <div className="mt-1 text-xs text-neutral-500">
+              <span className="text-neutral-400">Validation:</span>
+              <ul className="list-disc ml-4 mt-0.5 space-y-0.5">
+                {src.validation_checks.map((v, i) => <li key={i}>{v}</li>)}
+              </ul>
+            </div>
+          )}
+        </div>
+      )}
+
+      {cols.length > 0 && (
+        <div className="overflow-x-auto">
+          <table className="text-xs font-mono border-collapse w-full">
+            <thead>
+              <tr>
+                {cols.map((col) => (
+                  <th
+                    key={col}
+                    className="px-2 py-1 text-left text-neutral-400 border-b border-neutral-800 capitalize font-medium"
+                  >
+                    {col}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((row, i) => (
+                <tr key={i} className={i % 2 === 0 ? "" : "bg-neutral-900/40"}>
+                  {cols.map((col) => (
+                    <td key={col} className="px-2 py-1 text-neutral-300 border-b border-neutral-900">
+                      {row[col] != null ? String(row[col]) : "\u2014"}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
+}
+
+async function downloadNotebook(msg: Message) {
+  try {
+    const res = await fetch(`${SIGNALSCOPE_API_BASE}/analyze/notebook`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ report: msg }),
+    });
+
+    if (!res.ok) {
+      console.error("Notebook request failed", res.status);
+      return;
+    }
+
+    const data = await res.json();
+
+    if (!data?.notebook) {
+      console.error("No notebook returned");
+      return;
+    }
+
+    const blob = new Blob(
+      [JSON.stringify(data.notebook, null, 2)],
+      { type: "application/json" }
+    );
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "signalscope_analysis.ipynb";
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("Download failed", err);
+  }
+}
+
+const AXIS_STYLE = { fill: "#a3a3a3", fontSize: 10 };
+const AXIS_LABEL_STYLE = { fill: "#737373", fontSize: 10 };
+const TOOLTIP_STYLE = { backgroundColor: "#171717", border: "1px solid #404040", fontSize: 12 };
+const TOOLTIP_FORMATTER = (v: unknown) => typeof v === "number" ? v.toFixed(4) : String(v);
+
+function Charts({ msg }: { msg: Message }) {
+  const quantiles: { name: string; value: number }[] = [];
+  if (Array.isArray(msg.ui_components)) {
+    const qa = msg.ui_components.find((s: any) => s.id === "quantile_analysis");
+    const raw = qa?.details?.content?.quantiles;
+    if (Array.isArray(raw)) {
+      raw.forEach((q: any, i: number) => {
+        const val = typeof q.mean_return === "number" ? q.mean_return : null;
+        if (val !== null) quantiles.push({ name: `Q${q.quantile ?? i + 1}`, value: Number(val.toFixed(4)) });
+      });
+    }
+  }
+
+  const scatter: { signal: number; ret: number }[] = [];
+  if (Array.isArray(msg.data_preview)) {
+    msg.data_preview.forEach((row: any) => {
+      const x = typeof row.signal === "number" ? row.signal : parseFloat(row.signal);
+      const y = typeof row.return === "number" ? row.return : parseFloat(row.return);
+      if (!isNaN(x) && !isNaN(y)) scatter.push({ signal: Number(x.toFixed(4)), ret: Number(y.toFixed(4)) });
+    });
+  }
+
+  if (quantiles.length === 0 && scatter.length === 0) return null;
+
+  return (
+    <div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-3 space-y-5">
+      <h3 className="text-sm font-semibold text-neutral-200">Visual Analysis</h3>
+
+      {quantiles.length > 0 && (
+        <div className="mt-1">
+          <h4 className="text-xs font-semibold text-neutral-300 mb-0.5">Quantile Returns (Q1 → Q5)</h4>
+          <p className="text-xs text-neutral-500 mb-2">Higher quantiles should produce higher returns if the signal is predictive</p>
+          <ResponsiveContainer width="100%" height={190}>
+            <BarChart data={quantiles} margin={{ top: 4, right: 16, bottom: 24, left: 48 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
+              <XAxis
+                dataKey="name"
+                tick={AXIS_STYLE}
+                label={{ value: "Quantile", position: "insideBottom", offset: -10, style: AXIS_LABEL_STYLE }}
+              />
+              <YAxis
+                tick={AXIS_STYLE}
+                tickFormatter={(v) => v.toFixed(3)}
+                label={{ value: "Mean Return", angle: -90, position: "insideLeft", offset: 10, style: AXIS_LABEL_STYLE }}
+              />
+              <Tooltip contentStyle={TOOLTIP_STYLE} formatter={TOOLTIP_FORMATTER} />
+              <Bar dataKey="value" fill="#3b82f6" radius={[3, 3, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {scatter.length > 0 && (
+        <div className="mt-1">
+          <h4 className="text-xs font-semibold text-neutral-300 mb-0.5">Signal vs Forward Return</h4>
+          <p className="text-xs text-neutral-500 mb-2">Linear pattern indicates factor-driven behavior (beta exposure)</p>
+          <ResponsiveContainer width="100%" height={190}>
+            <ScatterChart margin={{ top: 4, right: 16, bottom: 24, left: 48 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+              <XAxis
+                type="number"
+                dataKey="signal"
+                name="Signal"
+                tick={AXIS_STYLE}
+                tickFormatter={(v) => v.toFixed(3)}
+                label={{ value: "Signal Value", position: "insideBottom", offset: -10, style: AXIS_LABEL_STYLE }}
+              />
+              <YAxis
+                type="number"
+                dataKey="ret"
+                name="Return"
+                tick={AXIS_STYLE}
+                tickFormatter={(v) => v.toFixed(3)}
+                label={{ value: "Forward Return", angle: -90, position: "insideLeft", offset: 10, style: AXIS_LABEL_STYLE }}
+              />
+              <Tooltip
+                cursor={{ strokeDasharray: "3 3" }}
+                contentStyle={TOOLTIP_STYLE}
+                formatter={TOOLTIP_FORMATTER}
+                labelFormatter={() => ""}
+              />
+              <Scatter data={scatter} fill="#6366f1" opacity={0.7} />
+            </ScatterChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CitationList({ citations }: { citations: Citation[] | undefined }) {
   const [expanded, setExpanded] = useState<string | null>(null);
 
@@ -607,7 +840,7 @@ function renderContent(content: any) {
           if (key === "quantiles" && Array.isArray(value)) {
             return (
               <div key={key}>
-                <div className="font-medium capitalize text-neutral-400">Quantiles:</div>
+                <div className="font-semibold capitalize text-neutral-400">Quantiles:</div>
                 <div className="ml-2 space-y-0.5">
                   {(value as any[]).map((q: any, i: number) => (
                     <div key={i}>
@@ -621,7 +854,7 @@ function renderContent(content: any) {
           if (typeof value === "number") {
             return (
               <div key={key}>
-                <span className="font-medium capitalize text-neutral-400">{key}:</span>{" "}
+                <span className="font-semibold capitalize text-neutral-400">{key}:</span>{" "}
                 {(value as number).toFixed(4)}
               </div>
             );
@@ -629,7 +862,7 @@ function renderContent(content: any) {
           if (typeof value === "boolean") {
             return (
               <div key={key}>
-                <span className="font-medium capitalize text-neutral-400">{key}:</span>{" "}
+                <span className="font-semibold capitalize text-neutral-400">{key}:</span>{" "}
                 {value ? "Yes" : "No"}
               </div>
             );
@@ -637,7 +870,7 @@ function renderContent(content: any) {
           if (Array.isArray(value)) {
             return (
               <div key={key}>
-                <span className="font-medium capitalize text-neutral-400">{key}:</span>{" "}
+                <span className="font-semibold capitalize text-neutral-400">{key}:</span>{" "}
                 {JSON.stringify(value)}
               </div>
             );
@@ -645,14 +878,14 @@ function renderContent(content: any) {
           if (value !== null && typeof value === "object") {
             return (
               <div key={key}>
-                <span className="font-medium capitalize text-neutral-400">{key}:</span>
+                <span className="font-semibold capitalize text-neutral-400">{key}:</span>
                 <div className="ml-2">{renderContent(value)}</div>
               </div>
             );
           }
           return (
             <div key={key}>
-              <span className="font-medium capitalize text-neutral-400">{key}:</span>{" "}
+              <span className="font-semibold capitalize text-neutral-400">{key}:</span>{" "}
               {String(value)}
             </div>
           );
@@ -854,6 +1087,8 @@ export default function SignalScopeDemoPage() {
           content: suggestion ? `\u2192 ${suggestion}` : "",
           ui_components: result.ui_components,
           _introspection: result._introspection,
+          source_explanation: result.source_explanation,
+          data_preview: result.data_preview,
         };
         setMessages((prev) => [...prev, assistantMessage]);
       } catch (err) {
@@ -1001,6 +1236,8 @@ export default function SignalScopeDemoPage() {
         content: suggestion ? `\u2192 ${suggestion}` : "",
         ui_components: result.ui_components,
         _introspection: result._introspection,
+        source_explanation: result.source_explanation,
+        data_preview: result.data_preview,
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
@@ -1069,6 +1306,16 @@ export default function SignalScopeDemoPage() {
                   {msg.ui_components
                     .filter((s: any) => s.id !== "llm_interpretation")
                     .map((s: any) => renderSection(s, handleAsk, setActiveSection))}
+                  <DataOverview msg={msg} />
+                  <Charts msg={msg} />
+                  {(msg.ui_components?.length || msg.data_preview?.length) && (
+                    <button
+                      onClick={() => downloadNotebook(msg)}
+                      className="mt-3 px-3 py-2 text-sm rounded border border-neutral-600 bg-neutral-900 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition cursor-pointer"
+                    >
+                      Download Notebook
+                    </button>
+                  )}
                 </div>
               )}
               {msg._introspection && (
@@ -1168,6 +1415,8 @@ export default function SignalScopeDemoPage() {
                     content: suggestion ? `\u2192 ${suggestion}` : "",
                     ui_components: result.ui_components,
                     _introspection: result._introspection,
+                    source_explanation: result.source_explanation,
+                    data_preview: result.data_preview,
                   },
                 ]);
                 setPreviousSource(lastSource);
