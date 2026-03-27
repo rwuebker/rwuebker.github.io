@@ -38,45 +38,9 @@ interface Message {
   };
   source_explanation?: SourceExplanation;
   data_preview?: Record<string, any>[];
-}
-
-function generateSuggestion(
-  report: any,
-  lastSource: string | null,
-  previousSource: string | null
-): string | null {
-  if (!report?.conclusion?.type) return null;
-
-  const type: string = report.conclusion.type;
-  const source: string | null = lastSource;
-
-  // Normalise type string — backend may use various casings/separators
-  const t = type.toLowerCase().replace(/[-_ ]/g, "");
-
-  // === noise / random signal ===
-  if (t === "noise" || t.includes("noise")) {
-    return "This signal appears to be noise. Want to try improving the construction or test a different signal?";
-  }
-
-  // === factor-driven ===
-  if (t === "factor" || t.includes("factor")) {
-    if (source === "random") {
-      return "This random signal is dominated by factor exposure. Want to test a structured signal like momentum instead?";
-    }
-    return "This looks factor-driven. Want to compare it to a random signal or neutralize factor exposure?";
-  }
-
-  // === alpha ===
-  if (t === "alpha" || t.includes("alpha")) {
-    return "This may contain alpha. Want to test its stability or validate it out-of-sample?";
-  }
-
-  // === comparison just ran (previous context still useful) ===
-  if (previousSource && lastSource && previousSource !== lastSource) {
-    return `Comparison complete. Want to explore the ${lastSource} signal further or test a new one?`;
-  }
-
-  return "Want to explore this signal further?";
+  synth_preset?: string;
+  validity?: { status: string; confidence?: string };
+  conclusion?: any;
 }
 
 function generateComparisonInsight(current: any, baseline: any, label: string): string {
@@ -668,6 +632,166 @@ async function downloadNotebook(msg: Message) {
   }
 }
 
+const SYNTH_PRESETS = [
+  { label: "Noise",         preset: "noise",  defaults: { beta: 0.0, noise_std: 2.0 } },
+  { label: "Weak Signal",   preset: "factor", defaults: { beta: 0.2, noise_std: 1.0 } },
+  { label: "Strong Factor", preset: "factor", defaults: { beta: 1.0, noise_std: 0.5 } },
+  { label: "Leaky Signal",  preset: "leaky",  defaults: { beta: 0.5, noise_std: 1.0 } },
+] as const;
+
+type SynthPreset = (typeof SYNTH_PRESETS)[number];
+
+function SyntheticGenerator({
+  loading,
+  onGenerate,
+  onCancel,
+}: {
+  loading: boolean;
+  onGenerate: (preset: string, params: Record<string, number>) => void;
+  onCancel: () => void;
+}) {
+  const [selected, setSelected] = useState<SynthPreset | null>(null);
+  const [params, setParams] = useState<Record<string, number>>({
+    n_assets: 100,
+    n_periods: 252,
+    beta: 0.5,
+    noise_std: 1.0,
+    seed: 42,
+  });
+
+  function handlePreset(p: SynthPreset) {
+    setSelected(p);
+    setParams((prev) => ({ ...prev, ...p.defaults }));
+  }
+
+  const fields: [string, string, string][] = [
+    ["n_assets",   "Assets",    "Number of assets in the dataset"],
+    ["n_periods",  "Periods",   "Number of time periods (trading days)"],
+    ["beta",       "Beta",      "Controls strength of the factor relationship"],
+    ["noise_std",  "Noise Std", "Adds randomness to returns"],
+    ["seed",       "Seed",      "Random seed for reproducibility"],
+  ];
+
+  return (
+    <div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-4 space-y-4">
+      <h3 className="text-sm font-semibold text-neutral-200">Generate Synthetic Signal</h3>
+
+      <div>
+        <div className="text-xs text-neutral-500 mb-2">Choose a preset:</div>
+        <div className="flex flex-wrap gap-2">
+          {SYNTH_PRESETS.map((p) => (
+            <button
+              key={p.label}
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => handlePreset(p)}
+              className={`px-3 py-1.5 text-xs rounded border transition ${
+                selected?.label === p.label
+                  ? "border-blue-500 bg-blue-950 text-blue-300"
+                  : "border-neutral-700 bg-neutral-900 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200"
+              }`}
+            >
+              {p.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="grid grid-cols-2 gap-x-4 gap-y-3">
+        {fields.map(([key, label, hint]) => (
+          <div key={key}>
+            <label className="block text-xs font-medium text-neutral-400 mb-0.5">{label}</label>
+            <input
+              type="number"
+              value={params[key]}
+              onChange={(e) =>
+                setParams((prev) => ({ ...prev, [key]: Number(e.target.value) }))
+              }
+              className="w-full px-2 py-1 text-xs bg-neutral-900 border border-neutral-800 rounded text-neutral-200 focus:outline-none focus:border-neutral-600"
+            />
+            <div className="text-xs text-neutral-600 mt-0.5">{hint}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="flex gap-2 pt-1">
+        <button
+          disabled={!selected || loading}
+          onClick={() => selected && onGenerate(selected.preset, params)}
+          className="px-4 py-2 text-sm rounded border border-neutral-600 bg-neutral-800 text-neutral-200 hover:bg-neutral-700 transition disabled:opacity-40 disabled:cursor-not-allowed"
+        >
+          Generate
+        </button>
+        <button
+          onClick={onCancel}
+          className="px-4 py-2 text-sm rounded border border-neutral-700 text-neutral-500 hover:text-neutral-300 transition"
+        >
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function LeakageAnalysis({ msg }: { msg: Message }) {
+  const sections: any[] = Array.isArray((msg as any).sections)
+    ? (msg as any).sections
+    : Array.isArray(msg.ui_components)
+    ? msg.ui_components
+    : [];
+  const section = sections.find(
+    (s: any) => s.title === "Leakage Analysis" || s.id === "leakage_analysis"
+  );
+  const data = section?.content ?? section?.details?.content;
+  if (!data) return null;
+
+  const score: number | null =
+    typeof data.leakage_score === "number" ? data.leakage_score : null;
+  const scoreColor =
+    score === null
+      ? "text-neutral-300"
+      : score > 0.01
+      ? "text-red-400"
+      : score < -0.01
+      ? "text-green-400"
+      : "text-neutral-300";
+
+  return (
+    <div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-3 space-y-2">
+      <h3 className="text-sm font-semibold text-neutral-200">Leakage Analysis</h3>
+      <div className="text-sm text-neutral-300 space-y-1">
+        {typeof data.ic_original === "number" && (
+          <div>
+            <span className="font-semibold text-neutral-400">IC (original):</span>{" "}
+            {data.ic_original.toFixed(4)}
+          </div>
+        )}
+        {typeof data.ic_forward === "number" && (
+          <div>
+            <span className="font-semibold text-neutral-400">IC (forward):</span>{" "}
+            {data.ic_forward.toFixed(4)}
+          </div>
+        )}
+        {score !== null && (
+          <div>
+            <span className="font-semibold text-neutral-400">Leakage score:</span>{" "}
+            <span className={scoreColor}>{score.toFixed(4)}</span>
+          </div>
+        )}
+      </div>
+      {data.interpretation && (
+        <p className="text-xs text-neutral-400 leading-relaxed">{data.interpretation}</p>
+      )}
+      {msg.validity && (
+        <div className="text-xs text-neutral-500">
+          <span className="font-semibold">Status:</span>{" "}
+          {msg.validity.status}
+          {msg.validity.confidence ? ` (${msg.validity.confidence})` : ""}
+        </div>
+      )}
+    </div>
+  );
+}
+
 const AXIS_STYLE = { fill: "#a3a3a3", fontSize: 10 };
 const AXIS_LABEL_STYLE = { fill: "#737373", fontSize: 10 };
 const TOOLTIP_STYLE = { backgroundColor: "#171717", border: "1px solid #404040", fontSize: 12 };
@@ -963,6 +1087,7 @@ export default function SignalScopeDemoPage() {
   const [customSignal, setCustomSignal] = useState<string>("");
   const [pendingClarification, setPendingClarification] = useState<AskResponse["clarification"] | null>(null);
   const [activeSection, setActiveSection] = useState<string | null>(null);
+  const [synthMode, setSynthMode] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef(0);
@@ -975,6 +1100,45 @@ export default function SignalScopeDemoPage() {
     }
     prevMessageCountRef.current = current;
   }, [messages]);
+
+  async function handleSynthGenerate(preset: string, params: Record<string, number>) {
+    setLoading(true);
+    setSynthMode(false);
+    try {
+      const res = await fetch(`${SIGNALSCOPE_API_BASE}/generate/analyze`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preset, params }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const result = await res.json();
+      setLastResult(result);
+      const nextPrevious = lastSource;
+      setPreviousSource(nextPrevious);
+      setLastSource("synthetic");
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content: "",
+          ui_components: result.ui_components,
+          _introspection: result._introspection,
+          source_explanation: result.source_explanation,
+          data_preview: result.data_preview,
+          synth_preset: preset,
+          validity: result.validity,
+          conclusion: result.conclusion,
+        },
+      ]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Error generating synthetic signal." },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleAsk(question: string, section?: string) {
     const report = getLastReport();
@@ -1041,6 +1205,60 @@ export default function SignalScopeDemoPage() {
 
     const q = input.toLowerCase().trim();
 
+    if (q.includes("generate")) {
+      let preset = "noise";
+      if (q.includes("factor")) preset = "factor";
+      else if (q.includes("nonlinear")) preset = "nonlinear";
+      else if (q.includes("leaky")) preset = "leaky";
+
+      try {
+        const res = await fetch(`${SIGNALSCOPE_API_BASE}/generate/analyze`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            preset,
+            params: { n_assets: 100, n_periods: 252, beta: 2.0, noise_std: 0.5, seed: 42 },
+          }),
+        });
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+        const result = await res.json();
+        setLastResult(result);
+        setLastSource("synthetic");
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content: "",
+            ui_components: result.ui_components,
+            _introspection: result._introspection,
+            source_explanation: result.source_explanation,
+            data_preview: result.data_preview,
+            synth_preset: preset,
+            validity: result.validity,
+            conclusion: result.conclusion,
+          },
+        ]);
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "Error generating synthetic signal." },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+      return;
+    }
+
+    if (q.includes("synthetic signal")) {
+      setSynthMode(true);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Choose a preset to generate synthetic signal data:" },
+      ]);
+      setLoading(false);
+      return;
+    }
+
     if (q.startsWith("compare")) {
       if (!lastResult) {
         setMessages((prev) => [
@@ -1075,20 +1293,19 @@ export default function SignalScopeDemoPage() {
         const nextPrevious = lastSource;
         const nextLast = "random";
 
-        // generate suggestion using NEXT state
-        const suggestion = generateSuggestion(result, nextLast, nextPrevious);
-
         // update React state
         setPreviousSource(nextPrevious);
         setLastSource(nextLast);
 
         const assistantMessage: Message = {
           role: "assistant",
-          content: suggestion ? `\u2192 ${suggestion}` : "",
+          content: "",
           ui_components: result.ui_components,
           _introspection: result._introspection,
           source_explanation: result.source_explanation,
           data_preview: result.data_preview,
+          validity: result.validity,
+          conclusion: result.conclusion,
         };
         setMessages((prev) => [...prev, assistantMessage]);
       } catch (err) {
@@ -1224,20 +1441,19 @@ export default function SignalScopeDemoPage() {
       const nextPrevious = lastSource;
       const nextLast = route.source || null;
 
-      // generate suggestion using NEXT state (not stale React state)
-      const suggestion = generateSuggestion(result, nextLast, nextPrevious);
-
       // now update React state
       setPreviousSource(nextPrevious);
       setLastSource(nextLast);
 
       const assistantMessage: Message = {
         role: "assistant",
-        content: suggestion ? `\u2192 ${suggestion}` : "",
+        content: "",
         ui_components: result.ui_components,
         _introspection: result._introspection,
         source_explanation: result.source_explanation,
         data_preview: result.data_preview,
+        validity: result.validity,
+        conclusion: result.conclusion,
       };
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
@@ -1300,14 +1516,49 @@ export default function SignalScopeDemoPage() {
                   {msg.content && (
                     <p className="text-sm text-neutral-400">{msg.content}</p>
                   )}
+                  {(() => {
+                    const type = msg.conclusion?.type;
+                    const validity = msg.validity?.status;
+                    let suggestion: string | null = null;
+                    if (validity === "invalid") {
+                      suggestion = "→ This signal appears to use future information. Want to test a properly constructed signal?";
+                    } else if (type === "noise") {
+                      suggestion = "→ This signal shows no predictive power. Want to test a structured signal like momentum instead?";
+                    } else if (type === "factor-driven") {
+                      suggestion = "→ This looks factor-driven. Want to compare it to a random signal?";
+                    } else if (type === "nonlinear") {
+                      suggestion = "→ This signal shows nonlinear structure. Want to test a linear factor signal for comparison?";
+                    } else if (type === "independent alpha") {
+                      suggestion = "→ This signal may contain independent alpha. Want to validate it further or compare against a factor model?";
+                    }
+                    return suggestion ? (
+                      <div className="mt-2 text-sm text-neutral-400">{suggestion}</div>
+                    ) : null;
+                  })()}
+                  {msg.validity?.status === "invalid" && (
+                    <div className="p-3 border border-red-500/40 bg-red-500/10 rounded text-sm text-red-300">
+                      ⚠️ This signal appears to use future information (lookahead bias). Results are not reliable.
+                    </div>
+                  )}
+                  {msg.validity?.status === "suspect" && (
+                    <div className="p-3 border border-yellow-500/40 bg-yellow-500/10 rounded text-sm text-yellow-300">
+                      ⚠️ This signal may contain leakage. Interpret results with caution.
+                    </div>
+                  )}
+                  {msg.synth_preset && (
+                    <div className="text-xs text-neutral-500 border border-neutral-800 rounded px-2 py-1 inline-block">
+                      Generated using synthetic data &middot; preset: <span className="text-neutral-400 font-medium">{msg.synth_preset}</span>
+                    </div>
+                  )}
                   {msg.ui_components
                     .filter((s: any) => s.id === "llm_interpretation")
                     .map((s: any) => renderSection(s, handleAsk, setActiveSection))}
                   {msg.ui_components
-                    .filter((s: any) => s.id !== "llm_interpretation")
+                    .filter((s: any) => s.id !== "llm_interpretation" && s.title !== "Leakage Analysis")
                     .map((s: any) => renderSection(s, handleAsk, setActiveSection))}
                   <DataOverview msg={msg} />
                   <Charts msg={msg} />
+                  <LeakageAnalysis msg={msg} />
                   {(msg.ui_components?.length || msg.data_preview?.length) && (
                     <button
                       onClick={() => downloadNotebook(msg)}
@@ -1363,6 +1614,14 @@ export default function SignalScopeDemoPage() {
           <div ref={chatEndRef} />
         </div>
 
+        {synthMode && (
+          <SyntheticGenerator
+            loading={loading}
+            onGenerate={handleSynthGenerate}
+            onCancel={() => setSynthMode(false)}
+          />
+        )}
+
         <form onSubmit={handleSubmit} className="flex gap-3">
           <input
             type="text"
@@ -1406,17 +1665,18 @@ export default function SignalScopeDemoPage() {
               try {
                 const result = await executeAction({ action: "analyze_signal", signal: parsed });
                 setLastResult(result);
-                const suggestion = generateSuggestion(result, "custom", lastSource);
                 setMessages((prev) => [
                   ...prev,
                   { role: "user", content: "analyze custom signal" },
                   {
                     role: "assistant",
-                    content: suggestion ? `\u2192 ${suggestion}` : "",
+                    content: "",
                     ui_components: result.ui_components,
                     _introspection: result._introspection,
                     source_explanation: result.source_explanation,
                     data_preview: result.data_preview,
+                    validity: result.validity,
+                    conclusion: result.conclusion,
                   },
                 ]);
                 setPreviousSource(lastSource);
