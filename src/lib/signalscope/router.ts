@@ -3,7 +3,7 @@ import { getLastReport, askQuestion } from "./actions";
 import { AskResponse } from "./types";
 
 export type RouteResult =
-  | { type: "action"; action: string; source?: string }
+  | { type: "action"; action: string; source?: string; preset?: string; params?: Record<string, any> }
   | { type: "ask"; askResponse: AskResponse };
 
 export async function routeUserInput(

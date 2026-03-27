@@ -3,6 +3,8 @@ export interface IntentAction {
   source?: string;
   explanation?: string;
   signal?: any[];
+  preset?: string;
+  params?: Record<string, any>;
 }
 
 export interface AskResponse {

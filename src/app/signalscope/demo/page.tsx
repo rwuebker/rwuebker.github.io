@@ -7,6 +7,7 @@ import {
 } from "recharts";
 import { routeUserInput } from "@/lib/signalscope/router";
 import { executeAction, getLastReport, askQuestion } from "@/lib/signalscope/actions";
+import ICLagChart from "@/components/ICLagChart";
 import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
 import type { AskResponse } from "@/lib/signalscope/types";
 
@@ -29,6 +30,7 @@ interface Message {
   role: "user" | "assistant";
   content: string;
   ui_components?: any[];
+  sections?: any[];
   clarification?: AskResponse["clarification"];
   section?: string;
   citations?: Citation[];
@@ -1205,50 +1207,6 @@ export default function SignalScopeDemoPage() {
 
     const q = input.toLowerCase().trim();
 
-    if (q.includes("generate")) {
-      let preset = "noise";
-      if (q.includes("factor")) preset = "factor";
-      else if (q.includes("nonlinear")) preset = "nonlinear";
-      else if (q.includes("leaky")) preset = "leaky";
-
-      try {
-        const res = await fetch(`${SIGNALSCOPE_API_BASE}/generate/analyze`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            preset,
-            params: { n_assets: 100, n_periods: 252, beta: 2.0, noise_std: 0.5, seed: 42 },
-          }),
-        });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const result = await res.json();
-        setLastResult(result);
-        setLastSource("synthetic");
-        setMessages((prev) => [
-          ...prev,
-          {
-            role: "assistant",
-            content: "",
-            ui_components: result.ui_components,
-            _introspection: result._introspection,
-            source_explanation: result.source_explanation,
-            data_preview: result.data_preview,
-            synth_preset: preset,
-            validity: result.validity,
-            conclusion: result.conclusion,
-          },
-        ]);
-      } catch (err) {
-        setMessages((prev) => [
-          ...prev,
-          { role: "assistant", content: "Error generating synthetic signal." },
-        ]);
-      } finally {
-        setLoading(false);
-      }
-      return;
-    }
-
     if (q.includes("synthetic signal")) {
       setSynthMode(true);
       setMessages((prev) => [
@@ -1480,7 +1438,11 @@ export default function SignalScopeDemoPage() {
           {messages.length === 0 && (
             <p className="text-neutral-600 text-sm">No messages yet.</p>
           )}
-          {messages.map((msg, i) => (
+          {messages.map((msg, i) => {
+            const lagSection =
+              lastResult?.sections?.find((s: any) => s.title === "IC vs Lag");
+
+            return (
             <div
               key={i}
               className={msg.role === "user" ? "text-right" : "text-left"}
@@ -1554,10 +1516,12 @@ export default function SignalScopeDemoPage() {
                     .filter((s: any) => s.id === "llm_interpretation")
                     .map((s: any) => renderSection(s, handleAsk, setActiveSection))}
                   {msg.ui_components
-                    .filter((s: any) => s.id !== "llm_interpretation" && s.title !== "Leakage Analysis")
+                    .filter((s: any) => s.id !== "llm_interpretation" && s.title !== "Leakage Analysis" && s.title !== "IC vs Lag")
                     .map((s: any) => renderSection(s, handleAsk, setActiveSection))}
                   <DataOverview msg={msg} />
                   <Charts msg={msg} />
+                  {console.log("IC vs Lag section:", lagSection)}
+                  <ICLagChart data={lagSection?.content?.points} />
                   <LeakageAnalysis msg={msg} />
                   {(msg.ui_components?.length || msg.data_preview?.length) && (
                     <button
@@ -1600,7 +1564,7 @@ export default function SignalScopeDemoPage() {
                 </div>
               )}
             </div>
-          ))}
+          );})}
           {loading && (
             <div className="text-left">
               <span className="text-xs text-neutral-500 block mb-1">

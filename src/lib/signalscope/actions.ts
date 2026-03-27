@@ -54,6 +54,25 @@ export async function executeAction(
     return result;
   }
 
+  if (intent.action === "generate_signal") {
+    const preset = intent.preset ?? "noise";
+    const params = intent.params ?? {};
+
+    const response = await fetch(`${SIGNALSCOPE_API_BASE}/generate/analyze`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ preset, params }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`SignalScope generate error: ${response.status}`);
+    }
+
+    const result: SignalScopeReport = await response.json();
+    lastReport = result;
+    return result;
+  }
+
   if (intent.action === "explain_last_result") {
     if (!lastReport) {
       throw new Error("No previous result to explain.");
