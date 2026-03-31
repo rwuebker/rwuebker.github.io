@@ -16,6 +16,10 @@ interface Citation {
   definition?: string;
   assumptions?: string[];
   failure_modes?: string[];
+  title?: string;
+  explanation?: string;
+  url?: string;
+  primary_reference?: { url?: string };
 }
 
 interface SourceExplanation {
@@ -944,6 +948,41 @@ function CitationList({ citations }: { citations: Citation[] | undefined }) {
                     </ul>
                   </div>
                 )}
+                {(c.title || c.explanation || c.url || c.primary_reference?.url) && (
+                  <div className="mt-2 pt-2 border-t border-neutral-800">
+                    {c.title && (
+                      <div className="font-medium text-neutral-300 mb-1">{c.title}</div>
+                    )}
+                    {c.explanation && (
+                      <div className="text-neutral-400 mb-1">{c.explanation}</div>
+                    )}
+                    {c.url && (
+                      <a
+                        href={c.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-blue-400 hover:text-blue-300 transition"
+                      >
+                        View reference →
+                      </a>
+                    )}
+                    {c.primary_reference?.url && (
+                      <a
+                        href={c.primary_reference.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        style={{
+                          display: "block",
+                          marginTop: "4px",
+                          fontSize: "0.85rem",
+                          color: "#555",
+                        }}
+                      >
+                        View original paper →
+                      </a>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -1487,7 +1526,7 @@ export default function SignalScopeDemoPage() {
                     } else if (type === "noise") {
                       suggestion = "→ This signal shows no predictive power. Want to test a structured signal like momentum instead?";
                     } else if (type === "factor-driven") {
-                      suggestion = "→ This looks factor-driven. Want to compare it to a random signal?";
+                      suggestion = "→ This signal shows strong explanatory power (high beta, low residual). Want to compare it to a random signal?";
                     } else if (type === "nonlinear") {
                       suggestion = "→ This signal shows nonlinear structure. Want to test a linear factor signal for comparison?";
                     } else if (type === "independent alpha") {
