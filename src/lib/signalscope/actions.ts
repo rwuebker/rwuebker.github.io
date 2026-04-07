@@ -30,7 +30,7 @@ export async function executeAction(
   intent: IntentAction
 ): Promise<SignalScopeReport> {
   if (intent.action === "analyze_signal") {
-    const source = intent.source ?? "random";
+    const source = intent.source ?? "noise";
 
     const response = await fetch(
       `${SIGNALSCOPE_API_BASE}/analyze/report?source=${encodeURIComponent(source)}`,

@@ -39,6 +39,6 @@ export async function routeUserInput(
     return { type: "action", ...data };
   } catch (err) {
     console.error("Router error:", err);
-    return { type: "action", action: "analyze_signal", source: "momentum" };
+    return { type: "action", action: "analyze_signal", source: "linear_factor" };
   }
 }

@@ -30,7 +30,7 @@ describe("routeUserInput", () => {
     const result = await routeUserInput("analyze momentum signal");
 
     expect(result.action).toBe("analyze_signal");
-    expect(result.source).toBe("momentum");
+    expect(result.source).toBe("linear_factor");
   });
 
   it("routes explain_last_result", async () => {
