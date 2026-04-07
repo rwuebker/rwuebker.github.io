@@ -17,12 +17,36 @@ export interface AskResponse {
   };
 }
 
+export interface AnalysisContext {
+  complete: boolean;
+  signal_source: string;
+  return_source: string;
+  return_definition: string;
+  universe: {
+    selection: string;
+    asset_count: number | null;
+  };
+  frequency: string;
+  alignment: string;
+  date_range: {
+    start: string | null;
+    end: string | null;
+  };
+  provenance: {
+    dataset_type: string;
+    source: string;
+    description: string;
+  };
+  warnings: string[];
+}
+
 export interface SignalScopeReport {
   interpretation: string;
   metrics: {
     ic?: number;
     rank_ic?: number;
   };
+  analysis_context?: AnalysisContext;
   conclusion?: {
     type: string;
     confidence: string;

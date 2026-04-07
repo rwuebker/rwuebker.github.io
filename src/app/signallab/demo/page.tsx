@@ -9,7 +9,7 @@ import { routeUserInput } from "@/lib/signalscope/router";
 import { executeAction, getLastReport, askQuestion } from "@/lib/signalscope/actions";
 import ICLagChart from "@/components/ICLagChart";
 import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
-import type { AskResponse } from "@/lib/signalscope/types";
+import type { AnalysisContext, AskResponse, SignalScopeReport } from "@/lib/signalscope/types";
 
 interface Citation {
   concept: string;
@@ -47,6 +47,7 @@ interface Message {
   synth_preset?: string;
   validity?: { status: string; confidence?: string };
   conclusion?: any;
+  analysis_context?: AnalysisContext;
 }
 
 const SYNTHETIC_ALIAS_TO_CANONICAL: Record<string, string> = {
@@ -78,6 +79,46 @@ function formatSyntheticDisplayName(name: string | null | undefined): string {
   const canonical = toCanonicalSyntheticName(name);
   if (!canonical) return "unknown";
   return SYNTHETIC_PRETTY_LABELS[canonical] ?? canonical.replace(/_/g, " ");
+}
+
+function formatAnalysisContextValue(value: string | null | undefined): string {
+  if (!value) return "Unknown";
+  return value.replace(/_/g, " ");
+}
+
+function formatUniverse(context: AnalysisContext): string {
+  const selection = formatAnalysisContextValue(context.universe?.selection);
+  const assetCount = context.universe?.asset_count;
+
+  if (typeof assetCount === "number") {
+    return `${selection} (${assetCount} assets)`;
+  }
+
+  return selection;
+}
+
+function formatDateRange(context: AnalysisContext): string {
+  const start = context.date_range?.start ?? "Unknown";
+  const end = context.date_range?.end ?? "Unknown";
+  return `${start} → ${end}`;
+}
+
+function buildReportMessage(
+  result: SignalScopeReport,
+  options?: { synthPreset?: string }
+): Message {
+  return {
+    role: "assistant",
+    content: "",
+    ui_components: result.ui_components,
+    _introspection: result._introspection,
+    source_explanation: result.source_explanation,
+    data_preview: result.data_preview,
+    synth_preset: options?.synthPreset,
+    validity: result.validity,
+    conclusion: result.conclusion,
+    analysis_context: result.analysis_context,
+  };
 }
 
 function generateComparisonInsight(current: any, baseline: any, label: string): string {
@@ -632,6 +673,64 @@ function DataOverview({ msg }: { msg: Message }) {
   );
 }
 
+function AnalysisContextBlock({ context }: { context: AnalysisContext | undefined }) {
+  if (!context) return null;
+
+  const hasWarnings = Array.isArray(context.warnings) && context.warnings.length > 0;
+  const isIncomplete = !context.complete;
+  const contextTone = isIncomplete
+    ? "border-yellow-500/30 bg-yellow-500/5"
+    : "border-neutral-800 bg-neutral-950";
+  const contextDetailLabel = isIncomplete ? "Context Warnings" : "Context Notes";
+  const contextDetailTone = isIncomplete
+    ? "border-yellow-500/25 bg-yellow-500/10"
+    : "border-neutral-800 bg-neutral-900/40";
+  const contextDetailTitleTone = isIncomplete ? "text-yellow-200" : "text-neutral-300";
+  const contextDetailTextTone = isIncomplete ? "text-yellow-100/90" : "text-neutral-400";
+
+  const rows: Array<[string, string]> = [
+    ["Signal source", formatAnalysisContextValue(context.signal_source)],
+    ["Return source", formatAnalysisContextValue(context.return_source)],
+    ["Return definition", formatAnalysisContextValue(context.return_definition)],
+    ["Universe", formatUniverse(context)],
+    ["Frequency", formatAnalysisContextValue(context.frequency)],
+    ["Alignment", formatAnalysisContextValue(context.alignment)],
+    ["Date range", formatDateRange(context)],
+  ];
+
+  return (
+    <div className={`rounded-md border p-3 space-y-3 ${contextTone}`}>
+      <div>
+        <h3 className="text-sm font-semibold text-neutral-200">Analysis Context</h3>
+        {!context.complete && (
+          <p className="mt-1 text-xs text-yellow-300/90">
+            Context is incomplete. Interpret the analysis with the listed caveats in mind.
+          </p>
+        )}
+      </div>
+
+      <div className="space-y-1 text-xs text-neutral-300">
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <span className="text-neutral-400">{label}:</span> {value}
+          </div>
+        ))}
+      </div>
+
+      {hasWarnings && (
+        <div className={`rounded border px-3 py-2 ${contextDetailTone}`}>
+          <div className={`text-xs font-medium ${contextDetailTitleTone}`}>{contextDetailLabel}</div>
+          <ul className={`mt-1 list-disc ml-4 space-y-1 text-xs ${contextDetailTextTone}`}>
+            {context.warnings.map((warning, index) => (
+              <li key={index}>{warning}</li>
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
 async function downloadNotebook(msg: Message) {
   try {
     const res = await fetch(`${SIGNALSCOPE_API_BASE}/analyze/notebook`, {
@@ -664,6 +763,62 @@ async function downloadNotebook(msg: Message) {
     URL.revokeObjectURL(url);
   } catch (err) {
     console.error("Download failed", err);
+  }
+}
+
+async function downloadPdfReport(msg: Message) {
+  try {
+    const reportPayload = getLastReport() ?? {
+      interpretation: (msg as any).interpretation,
+      metrics: (msg as any).metrics,
+      sections: msg.sections,
+      ui_components: msg.ui_components,
+      _introspection: msg._introspection,
+      source_explanation: msg.source_explanation,
+      data_preview: msg.data_preview,
+      validity: msg.validity,
+      conclusion: msg.conclusion,
+      analysis_context: msg.analysis_context,
+    };
+
+    let res = await fetch(`${SIGNALSCOPE_API_BASE}/analyze/report/pdf`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ report: reportPayload }),
+    });
+
+    // Compatibility fallback: some backend versions accept raw report JSON rather than { report: ... }.
+    if (res.status === 422) {
+      res = await fetch(`${SIGNALSCOPE_API_BASE}/analyze/report/pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(reportPayload),
+      });
+    }
+
+    if (!res.ok) {
+      const errorText = await res.text().catch(() => "");
+      console.error("PDF request failed", res.status, errorText);
+      return;
+    }
+
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const source =
+      msg.synth_preset ??
+      msg.analysis_context?.signal_source ??
+      msg.analysis_context?.provenance?.source ??
+      msg.source_explanation?.model ??
+      "unknown";
+    const normalizedSource = source.toLowerCase().trim().replace(/\s+/g, "_").replace(/[^a-z0-9_-]/g, "");
+    const timestamp = Math.floor(Date.now() / 1000);
+    a.href = url;
+    a.download = `signal_lab_report_${normalizedSource}_${timestamp}.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (err) {
+    console.error("PDF download failed", err);
   }
 }
 
@@ -1030,6 +1185,17 @@ function renderContent(content: any) {
     return (
       <div className="space-y-2 text-sm text-neutral-300">
         {Object.entries(content).map(([key, value]) => {
+          const label = key === "ic_t_stat"
+            ? "IC t-stat"
+            : key === "rank_ic_t_stat"
+            ? "Rank IC t-stat"
+            : key;
+
+          // Hide t-stats when backend returns null during partial/incomplete analyses.
+          if ((key === "ic_t_stat" || key === "rank_ic_t_stat") && value == null) {
+            return null;
+          }
+
           // quantiles array — special rendering
           if (key === "quantiles" && Array.isArray(value)) {
             return (
@@ -1046,17 +1212,22 @@ function renderContent(content: any) {
             );
           }
           if (typeof value === "number") {
+            const formattedValue =
+              key === "ic_t_stat" || key === "rank_ic_t_stat"
+                ? (value as number).toFixed(2)
+                : (value as number).toFixed(4);
+
             return (
               <div key={key}>
-                <span className="font-semibold capitalize text-neutral-400">{key}:</span>{" "}
-                {(value as number).toFixed(4)}
+                <span className="font-semibold capitalize text-neutral-400">{label}:</span>{" "}
+                {formattedValue}
               </div>
             );
           }
           if (typeof value === "boolean") {
             return (
               <div key={key}>
-                <span className="font-semibold capitalize text-neutral-400">{key}:</span>{" "}
+                <span className="font-semibold capitalize text-neutral-400">{label}:</span>{" "}
                 {value ? "Yes" : "No"}
               </div>
             );
@@ -1064,7 +1235,7 @@ function renderContent(content: any) {
           if (Array.isArray(value)) {
             return (
               <div key={key}>
-                <span className="font-semibold capitalize text-neutral-400">{key}:</span>{" "}
+                <span className="font-semibold capitalize text-neutral-400">{label}:</span>{" "}
                 {JSON.stringify(value)}
               </div>
             );
@@ -1072,14 +1243,14 @@ function renderContent(content: any) {
           if (value !== null && typeof value === "object") {
             return (
               <div key={key}>
-                <span className="font-semibold capitalize text-neutral-400">{key}:</span>
+                <span className="font-semibold capitalize text-neutral-400">{label}:</span>
                 <div className="ml-2">{renderContent(value)}</div>
               </div>
             );
           }
           return (
             <div key={key}>
-              <span className="font-semibold capitalize text-neutral-400">{key}:</span>{" "}
+              <span className="font-semibold capitalize text-neutral-400">{label}:</span>{" "}
               {String(value)}
             </div>
           );
@@ -1188,17 +1359,7 @@ export default function SignalScopeDemoPage() {
       setLastSource("synthetic");
       setMessages((prev) => [
         ...prev,
-        {
-          role: "assistant",
-          content: "",
-          ui_components: result.ui_components,
-          _introspection: result._introspection,
-          source_explanation: result.source_explanation,
-          data_preview: result.data_preview,
-          synth_preset: preset,
-          validity: result.validity,
-          conclusion: result.conclusion,
-        },
+        buildReportMessage(result, { synthPreset: preset }),
       ]);
     } catch (err) {
       setMessages((prev) => [
@@ -1328,16 +1489,7 @@ export default function SignalScopeDemoPage() {
         setPreviousSource(nextPrevious);
         setLastSource(nextLast);
 
-        const assistantMessage: Message = {
-          role: "assistant",
-          content: "",
-          ui_components: result.ui_components,
-          _introspection: result._introspection,
-          source_explanation: result.source_explanation,
-          data_preview: result.data_preview,
-          validity: result.validity,
-          conclusion: result.conclusion,
-        };
+        const assistantMessage = buildReportMessage(result);
         setMessages((prev) => [...prev, assistantMessage]);
       } catch (err) {
         setMessages((prev) => [
@@ -1476,16 +1628,7 @@ export default function SignalScopeDemoPage() {
       setPreviousSource(nextPrevious);
       setLastSource(nextLast);
 
-      const assistantMessage: Message = {
-        role: "assistant",
-        content: "",
-        ui_components: result.ui_components,
-        _introspection: result._introspection,
-        source_explanation: result.source_explanation,
-        data_preview: result.data_preview,
-        validity: result.validity,
-        conclusion: result.conclusion,
-      };
+      const assistantMessage = buildReportMessage(result);
       setMessages((prev) => [...prev, assistantMessage]);
     } catch (err) {
       const errorMessage: Message = {
@@ -1585,6 +1728,7 @@ export default function SignalScopeDemoPage() {
                       Generated using synthetic data &middot; preset: <span className="text-neutral-400 font-medium">{formatSyntheticDisplayName(msg.synth_preset)}</span>
                     </div>
                   )}
+                  <AnalysisContextBlock context={msg.analysis_context} />
                   {msg.ui_components
                     .filter((s: any) => s.id === "llm_interpretation")
                     .map((s: any) => renderSection(s, handleAsk, setActiveSection))}
@@ -1596,12 +1740,20 @@ export default function SignalScopeDemoPage() {
                   <ICLagChart data={lagSection?.content?.points} />
                   <LeakageAnalysis msg={msg} />
                   {(msg.ui_components?.length || msg.data_preview?.length) && (
-                    <button
-                      onClick={() => downloadNotebook(msg)}
-                      className="mt-3 px-3 py-2 text-sm rounded border border-neutral-600 bg-neutral-900 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition cursor-pointer"
-                    >
-                      Download Notebook
-                    </button>
+                    <div className="mt-3 flex flex-wrap gap-2">
+                      <button
+                        onClick={() => downloadNotebook(msg)}
+                        className="px-3 py-2 text-sm rounded border border-neutral-600 bg-neutral-900 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition cursor-pointer"
+                      >
+                        Download Notebook
+                      </button>
+                      <button
+                        onClick={() => downloadPdfReport(msg)}
+                        className="px-3 py-2 text-sm rounded border border-neutral-600 bg-neutral-900 text-neutral-400 hover:bg-neutral-800 hover:text-neutral-200 transition cursor-pointer"
+                      >
+                        Download Report (PDF)
+                      </button>
+                    </div>
                   )}
                 </div>
               )}
@@ -1704,16 +1856,7 @@ export default function SignalScopeDemoPage() {
                 setMessages((prev) => [
                   ...prev,
                   { role: "user", content: "analyze custom signal" },
-                  {
-                    role: "assistant",
-                    content: "",
-                    ui_components: result.ui_components,
-                    _introspection: result._introspection,
-                    source_explanation: result.source_explanation,
-                    data_preview: result.data_preview,
-                    validity: result.validity,
-                    conclusion: result.conclusion,
-                  },
+                  buildReportMessage(result),
                 ]);
                 setPreviousSource(lastSource);
                 setLastSource("custom");
