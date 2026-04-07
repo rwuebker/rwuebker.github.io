@@ -887,7 +887,7 @@ function Charts({ msg }: { msg: Message }) {
       {scatter.length > 0 && (
         <div className="mt-1">
           <h4 className="text-xs font-semibold text-neutral-300 mb-0.5">Signal vs Forward Return</h4>
-          <p className="text-xs text-neutral-500 mb-2">Linear pattern indicates a strong signal-return relationship</p>
+          <p className="text-xs text-neutral-500 mb-2">Linear pattern indicates a strong signal–return relationship</p>
           <ResponsiveContainer width="100%" height={190}>
             <ScatterChart margin={{ top: 4, right: 16, bottom: 24, left: 48 }}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -1593,7 +1593,6 @@ export default function SignalScopeDemoPage() {
                     .map((s: any) => renderSection(s, handleAsk, setActiveSection))}
                   <DataOverview msg={msg} />
                   <Charts msg={msg} />
-                  {console.log("IC vs Lag section:", lagSection)}
                   <ICLagChart data={lagSection?.content?.points} />
                   <LeakageAnalysis msg={msg} />
                   {(msg.ui_components?.length || msg.data_preview?.length) && (

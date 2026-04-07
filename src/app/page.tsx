@@ -19,10 +19,10 @@ export default function Home() {
 
               <div className="absolute right-0 top-full mt-2 w-44 bg-neutral-900 border border-neutral-800 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">
                 <Link
-                  href="/projects/signalscope"
+                  href="/projects/signallab"
                   className="block px-4 py-2 text-sm text-neutral-400 hover:text-white hover:bg-neutral-800"
                 >
-                  SignalScope
+                  SignalLab
                 </Link>
               </div>
             </div>
