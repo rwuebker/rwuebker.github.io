@@ -872,6 +872,22 @@ function ResearchTheoryBlock({
                     link
                   </a>
                 )}
+                {(ref.year || ref.authors || ref.publication || ref.doi || ref.hypothesis) && (
+                  <details className="mt-1">
+                    <summary className="cursor-pointer text-neutral-500 hover:text-neutral-300">
+                      Drilldown
+                    </summary>
+                    <div className="mt-1 space-y-1 text-neutral-400">
+                      {ref.year && <div>Year: {ref.year}</div>}
+                      {Array.isArray(ref.authors) && ref.authors.length > 0 && (
+                        <div>Authors: {ref.authors.join(", ")}</div>
+                      )}
+                      {ref.publication && <div>Publication: {ref.publication}</div>}
+                      {ref.doi && <div>DOI: {ref.doi}</div>}
+                      {ref.hypothesis && <div>Hypothesis: {ref.hypothesis}</div>}
+                    </div>
+                  </details>
+                )}
               </li>
             ))}
           </ul>
