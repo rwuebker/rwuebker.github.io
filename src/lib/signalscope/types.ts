@@ -2,6 +2,7 @@ export interface IntentAction {
   action: string;
   source?: string;
   feature_id?: string;
+  factor_set?: string;
   explanation?: string;
   signal?: any[];
   signal_metadata?: {
@@ -70,5 +71,6 @@ export interface SignalScopeReport {
     summary: string;
     details: Record<string, any>;
   };
+  factorscope_report?: Record<string, any>;
   [key: string]: any;
 }

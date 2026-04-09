@@ -58,6 +58,7 @@ interface Message {
     value_column?: string;
     params?: Record<string, any>;
   };
+  factorscope_report?: Record<string, any>;
 }
 
 const SYNTHETIC_ALIAS_TO_CANONICAL: Record<string, string> = {
@@ -130,10 +131,32 @@ function buildReportMessage(
     analysis_context: result.analysis_context,
     run_id: (result as any).run_id,
     feature_scope: (result as any).feature_scope,
+    factorscope_report: (result as any).factorscope_report,
     ...(result as any).research_theory ? { research_theory: (result as any).research_theory } : {},
     ...(result as any).user_references ? { user_references: (result as any).user_references } : {},
     ...(result as any).citation_audit ? { citation_audit: (result as any).citation_audit } : {},
   };
+}
+
+function FactorScopeBlock({
+  report,
+}: {
+  report: Record<string, any> | undefined;
+}) {
+  if (!report || !report.after_controls) return null;
+  const ac = report.after_controls;
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3 space-y-2">
+      <h3 className="text-sm font-semibold text-neutral-200">FactorScope</h3>
+      <div className="space-y-1 text-xs text-neutral-300">
+        <div><span className="text-neutral-400">Factor set:</span> {report.factor_set}</div>
+        <div><span className="text-neutral-400">Signal coeff (after controls):</span> {Number(ac.signal_coefficient ?? 0).toFixed(4)}</div>
+        <div><span className="text-neutral-400">Signal coeff t-stat:</span> {Number(ac.signal_coefficient_t_stat ?? 0).toFixed(2)}</div>
+        <div><span className="text-neutral-400">Residual alpha:</span> {Number(ac.residual_alpha ?? 0).toFixed(4)}</div>
+        <div><span className="text-neutral-400">Residual alpha t-stat:</span> {Number(ac.residual_alpha_t_stat ?? 0).toFixed(2)}</div>
+      </div>
+    </div>
+  );
 }
 
 function generateComparisonInsight(current: any, baseline: any, label: string): string {
@@ -1815,7 +1838,7 @@ export default function SignalScopeDemoPage() {
         <h1 className="text-2xl font-semibold mb-1">SignalLab Demo</h1>
         <p className="text-neutral-400 text-sm mb-8">
           Try: &quot;analyze linear factor signal&quot; or &quot;analyze noise
-          signal&quot; or &quot;analyze moving average crossover on linear factor&quot;
+          signal&quot; or &quot;analyze moving average crossover on linear factor&quot; or &quot;run factor scope after controls&quot;
         </p>
 
         <div className="flex flex-col gap-4 mb-6 min-h-[300px] overflow-anchor-none" style={{ overflowAnchor: "none" }}>
@@ -1898,6 +1921,7 @@ export default function SignalScopeDemoPage() {
                   )}
                   <AnalysisContextBlock context={msg.analysis_context} />
                   <FeatureScopeBlock feature={msg.feature_scope} />
+                  <FactorScopeBlock report={msg.factorscope_report} />
                   <ResearchTheoryBlock
                     theory={(msg as any).research_theory}
                     references={(msg as any).user_references}

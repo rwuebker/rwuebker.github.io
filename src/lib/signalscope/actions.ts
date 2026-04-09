@@ -104,6 +104,33 @@ export async function executeAction(
     return result;
   }
 
+  if (intent.action === "analyze_factorscope") {
+    const source = intent.source ?? "linear_factor";
+    const factorSet = intent.factor_set ?? "ff3";
+    const response = await fetch(
+      `${SIGNALSCOPE_API_BASE}/factorscope/report?source=${encodeURIComponent(source)}&factor_set=${encodeURIComponent(factorSet)}`,
+      { method: "POST" }
+    );
+
+    if (!response.ok) {
+      throw new Error(`FactorScope API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if ((data as any).valid === false) {
+      throw new Error((data as any).message ?? "FactorScope analysis failed.");
+    }
+    const result: SignalScopeReport = {
+      interpretation:
+        "FactorScope analysis completed. Review controlled coefficients and residual alpha below.",
+      metrics: {},
+      factorscope_report: data,
+      sections: [],
+    } as SignalScopeReport;
+    lastReport = result;
+    return result;
+  }
+
   if (intent.action === "explain_last_result") {
     if (!lastReport) {
       throw new Error("No previous result to explain.");
