@@ -770,6 +770,23 @@ function AnalysisContextBlock({ context }: { context: AnalysisContext | undefine
     { key: "date_range", label: "Date range", value: formatDateRange(context) },
   ];
 
+  const fallbackDetail = (key: string, label: string, value: string) => ({
+    summary: `${label}: ${value}`,
+    assumptions: [
+      "Context values are computed from the dataset used in this run.",
+      "Interpretation quality depends on correct source metadata and alignment.",
+    ],
+    equations: [`${key} = observed_from_prepared_dataset`],
+    distributions: [
+      "Distribution notes are source-dependent; use Data Overview and section diagnostics for full context.",
+    ],
+    validation_checks: [
+      "Required schema columns are validated before analysis.",
+      "Date parsing and cleaning are applied in DataScope.",
+    ],
+    citations: [],
+  });
+
   return (
     <div className={`rounded-md border p-3 space-y-3 ${contextTone}`}>
       <div>
@@ -794,50 +811,50 @@ function AnalysisContextBlock({ context }: { context: AnalysisContext | undefine
               <span className="text-neutral-400">{row.label}:</span> {row.value}
               <span className="ml-2 text-neutral-500">{isExpanded ? "▲" : "▼"}</span>
             </button>
-            {isExpanded && detail && (
+            {isExpanded && (
               <div className="mt-2 space-y-2 text-xs text-neutral-300 border-t border-neutral-800 pt-2">
-                {detail.summary && (
+                {((detail || fallbackDetail(row.key, row.label, row.value)).summary) && (
                   <div>
-                    <span className="text-neutral-400">Summary:</span> {detail.summary}
+                    <span className="text-neutral-400">Summary:</span> {(detail || fallbackDetail(row.key, row.label, row.value)).summary}
                   </div>
                 )}
-                {Array.isArray(detail.assumptions) && detail.assumptions.length > 0 && (
+                {Array.isArray((detail || fallbackDetail(row.key, row.label, row.value)).assumptions) && (detail || fallbackDetail(row.key, row.label, row.value)).assumptions!.length > 0 && (
                   <div>
                     <div className="text-neutral-400">Assumptions</div>
                     <ul className="list-disc ml-4 mt-1 space-y-1 text-neutral-300">
-                      {detail.assumptions.map((item, idx) => <li key={idx}>{item}</li>)}
+                      {(detail || fallbackDetail(row.key, row.label, row.value)).assumptions!.map((item, idx) => <li key={idx}>{item}</li>)}
                     </ul>
                   </div>
                 )}
-                {Array.isArray(detail.equations) && detail.equations.length > 0 && (
+                {Array.isArray((detail || fallbackDetail(row.key, row.label, row.value)).equations) && (detail || fallbackDetail(row.key, row.label, row.value)).equations!.length > 0 && (
                   <div>
                     <div className="text-neutral-400">Equations</div>
                     <ul className="list-disc ml-4 mt-1 space-y-1 font-mono text-neutral-300">
-                      {detail.equations.map((item, idx) => <li key={idx}>{item}</li>)}
+                      {(detail || fallbackDetail(row.key, row.label, row.value)).equations!.map((item, idx) => <li key={idx}>{item}</li>)}
                     </ul>
                   </div>
                 )}
-                {Array.isArray(detail.distributions) && detail.distributions.length > 0 && (
+                {Array.isArray((detail || fallbackDetail(row.key, row.label, row.value)).distributions) && (detail || fallbackDetail(row.key, row.label, row.value)).distributions!.length > 0 && (
                   <div>
                     <div className="text-neutral-400">Distributions</div>
                     <ul className="list-disc ml-4 mt-1 space-y-1 text-neutral-300">
-                      {detail.distributions.map((item, idx) => <li key={idx}>{item}</li>)}
+                      {(detail || fallbackDetail(row.key, row.label, row.value)).distributions!.map((item, idx) => <li key={idx}>{item}</li>)}
                     </ul>
                   </div>
                 )}
-                {Array.isArray(detail.validation_checks) && detail.validation_checks.length > 0 && (
+                {Array.isArray((detail || fallbackDetail(row.key, row.label, row.value)).validation_checks) && (detail || fallbackDetail(row.key, row.label, row.value)).validation_checks!.length > 0 && (
                   <div>
                     <div className="text-neutral-400">Validation checks</div>
                     <ul className="list-disc ml-4 mt-1 space-y-1 text-neutral-300">
-                      {detail.validation_checks.map((item, idx) => <li key={idx}>{item}</li>)}
+                      {(detail || fallbackDetail(row.key, row.label, row.value)).validation_checks!.map((item, idx) => <li key={idx}>{item}</li>)}
                     </ul>
                   </div>
                 )}
-                {Array.isArray(detail.citations) && detail.citations.length > 0 && (
+                {Array.isArray((detail || fallbackDetail(row.key, row.label, row.value)).citations) && (detail || fallbackDetail(row.key, row.label, row.value)).citations!.length > 0 && (
                   <div>
                     <div className="text-neutral-400">Citations</div>
                     <ul className="list-disc ml-4 mt-1 space-y-1 text-neutral-300">
-                      {detail.citations.map((c, idx) => (
+                      {(detail || fallbackDetail(row.key, row.label, row.value)).citations!.map((c, idx) => (
                         <li key={idx}>
                           {c.title || "Reference"} {c.kind ? `(${c.kind})` : ""}
                           {c.url && (
@@ -1239,6 +1256,7 @@ function LeakageAnalysis({ msg }: { msg: Message }) {
     (s: any) => s.title === "Leakage Analysis" || s.id === "leakage_analysis"
   );
   const data = section?.content ?? section?.details?.content;
+  const citations = section?.citations ?? section?.details?.citations ?? [];
   if (!data) return null;
 
   const score: number | null =
@@ -1285,6 +1303,7 @@ function LeakageAnalysis({ msg }: { msg: Message }) {
           {msg.validity.confidence ? ` (${msg.validity.confidence})` : ""}
         </div>
       )}
+      <CitationList citations={citations} />
     </div>
   );
 }
