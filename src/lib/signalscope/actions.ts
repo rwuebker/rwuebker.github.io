@@ -49,6 +49,9 @@ export async function executeAction(
     }
 
     const result: SignalScopeReport = await response.json();
+    if ((result as any).valid === false) {
+      throw new Error((result as any).message ?? "SignalScope analysis failed.");
+    }
     lastReport = result;
     return result;
   }
@@ -68,6 +71,9 @@ export async function executeAction(
     }
 
     const result: SignalScopeReport = await response.json();
+    if ((result as any).valid === false) {
+      throw new Error((result as any).message ?? "SignalScope generation failed.");
+    }
     lastReport = result;
     return result;
   }
@@ -91,6 +97,9 @@ export async function executeAction(
     }
 
     const result: SignalScopeReport = await response.json();
+    if ((result as any).valid === false) {
+      throw new Error((result as any).message ?? "Feature analysis failed.");
+    }
     lastReport = result;
     return result;
   }
