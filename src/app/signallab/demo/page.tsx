@@ -1296,6 +1296,25 @@ function LeakageAnalysis({ msg }: { msg: Message }) {
       {data.interpretation && (
         <p className="text-xs text-neutral-400 leading-relaxed">{data.interpretation}</p>
       )}
+      {data.reference_bands && (
+        <div className="rounded border border-neutral-800 bg-neutral-900/40 p-2 text-xs space-y-1">
+          <div className="font-medium text-neutral-300">Leakage Score Context</div>
+          <div className="text-neutral-400">
+            Expected neutral band: [{Number(data.reference_bands.neutral_band?.min ?? -0.02).toFixed(2)}, {Number(data.reference_bands.neutral_band?.max ?? 0.02).toFixed(2)}]
+          </div>
+          <div className="text-neutral-400">
+            Valid timing signal typically: score &lt; {Number(data.reference_bands.valid_threshold ?? -0.02).toFixed(2)}
+          </div>
+          <div className="text-neutral-400">
+            Suspect leakage signal typically: score &gt; {Number(data.reference_bands.suspect_threshold ?? 0.02).toFixed(2)}
+          </div>
+          {score !== null && (
+            <div className="text-neutral-300">
+              Current score position: <span className="text-neutral-200">{String(data.score_position || "unknown")}</span>
+            </div>
+          )}
+        </div>
+      )}
       {msg.validity && (
         <div className="text-xs text-neutral-500">
           <span className="font-semibold">Status:</span>{" "}
