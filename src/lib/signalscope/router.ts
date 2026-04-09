@@ -11,9 +11,16 @@ export async function routeUserInput(
   section?: string
 ): Promise<RouteResult> {
   const lastReport = getLastReport();
+  const normalizedMessage = message.toLowerCase().trim();
+  const isActionIntent = /^(analyze|run|generate|recreate|compare|test)\b/.test(normalizedMessage)
+    || normalizedMessage.includes(" factor scope")
+    || normalizedMessage.includes(" return scope")
+    || normalizedMessage.includes(" moving average")
+    || normalizedMessage.includes(" crossover");
 
-  // If a report is loaded, route through /analyze/ask first.
-  if (lastReport) {
+  // If a report is loaded and this does not look like a new action intent,
+  // route through /analyze/ask first.
+  if (lastReport && !isActionIntent) {
     try {
       const askResponse = await askQuestion(message, lastReport, section);
       // If the backend returned a meaningful answer or clarification, use it.

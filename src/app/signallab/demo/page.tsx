@@ -745,6 +745,7 @@ function DataOverview({ msg }: { msg: Message }) {
 }
 
 function AnalysisContextBlock({ context }: { context: AnalysisContext | undefined }) {
+  const [expandedKey, setExpandedKey] = useState<string | null>(null);
   if (!context) return null;
 
   const hasWarnings = Array.isArray(context.warnings) && context.warnings.length > 0;
@@ -759,14 +760,14 @@ function AnalysisContextBlock({ context }: { context: AnalysisContext | undefine
   const contextDetailTitleTone = isIncomplete ? "text-yellow-200" : "text-neutral-300";
   const contextDetailTextTone = isIncomplete ? "text-yellow-100/90" : "text-neutral-400";
 
-  const rows: Array<[string, string]> = [
-    ["Signal source", formatAnalysisContextValue(context.signal_source)],
-    ["Return source", formatAnalysisContextValue(context.return_source)],
-    ["Return definition", formatAnalysisContextValue(context.return_definition)],
-    ["Universe", formatUniverse(context)],
-    ["Frequency", formatAnalysisContextValue(context.frequency)],
-    ["Alignment", formatAnalysisContextValue(context.alignment)],
-    ["Date range", formatDateRange(context)],
+  const rows: Array<{ key: string; label: string; value: string }> = [
+    { key: "signal_source", label: "Signal source", value: formatAnalysisContextValue(context.signal_source) },
+    { key: "return_source", label: "Return source", value: formatAnalysisContextValue(context.return_source) },
+    { key: "return_definition", label: "Return definition", value: formatAnalysisContextValue(context.return_definition) },
+    { key: "universe", label: "Universe", value: formatUniverse(context) },
+    { key: "frequency", label: "Frequency", value: formatAnalysisContextValue(context.frequency) },
+    { key: "alignment", label: "Alignment", value: formatAnalysisContextValue(context.alignment) },
+    { key: "date_range", label: "Date range", value: formatDateRange(context) },
   ];
 
   return (
@@ -780,12 +781,85 @@ function AnalysisContextBlock({ context }: { context: AnalysisContext | undefine
         )}
       </div>
 
-      <div className="space-y-1 text-xs text-neutral-300">
-        {rows.map(([label, value]) => (
-          <div key={label}>
-            <span className="text-neutral-400">{label}:</span> {value}
+      <div className="space-y-2 text-xs text-neutral-300">
+        {rows.map((row) => {
+          const isExpanded = expandedKey === row.key;
+          const detail = context.details?.[row.key];
+          return (
+          <div key={row.key} className="rounded border border-neutral-800 bg-neutral-900/30 px-2 py-2">
+            <button
+              onClick={() => setExpandedKey(isExpanded ? null : row.key)}
+              className="w-full text-left"
+            >
+              <span className="text-neutral-400">{row.label}:</span> {row.value}
+              <span className="ml-2 text-neutral-500">{isExpanded ? "▲" : "▼"}</span>
+            </button>
+            {isExpanded && detail && (
+              <div className="mt-2 space-y-2 text-xs text-neutral-300 border-t border-neutral-800 pt-2">
+                {detail.summary && (
+                  <div>
+                    <span className="text-neutral-400">Summary:</span> {detail.summary}
+                  </div>
+                )}
+                {Array.isArray(detail.assumptions) && detail.assumptions.length > 0 && (
+                  <div>
+                    <div className="text-neutral-400">Assumptions</div>
+                    <ul className="list-disc ml-4 mt-1 space-y-1 text-neutral-300">
+                      {detail.assumptions.map((item, idx) => <li key={idx}>{item}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {Array.isArray(detail.equations) && detail.equations.length > 0 && (
+                  <div>
+                    <div className="text-neutral-400">Equations</div>
+                    <ul className="list-disc ml-4 mt-1 space-y-1 font-mono text-neutral-300">
+                      {detail.equations.map((item, idx) => <li key={idx}>{item}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {Array.isArray(detail.distributions) && detail.distributions.length > 0 && (
+                  <div>
+                    <div className="text-neutral-400">Distributions</div>
+                    <ul className="list-disc ml-4 mt-1 space-y-1 text-neutral-300">
+                      {detail.distributions.map((item, idx) => <li key={idx}>{item}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {Array.isArray(detail.validation_checks) && detail.validation_checks.length > 0 && (
+                  <div>
+                    <div className="text-neutral-400">Validation checks</div>
+                    <ul className="list-disc ml-4 mt-1 space-y-1 text-neutral-300">
+                      {detail.validation_checks.map((item, idx) => <li key={idx}>{item}</li>)}
+                    </ul>
+                  </div>
+                )}
+                {Array.isArray(detail.citations) && detail.citations.length > 0 && (
+                  <div>
+                    <div className="text-neutral-400">Citations</div>
+                    <ul className="list-disc ml-4 mt-1 space-y-1 text-neutral-300">
+                      {detail.citations.map((c, idx) => (
+                        <li key={idx}>
+                          {c.title || "Reference"} {c.kind ? `(${c.kind})` : ""}
+                          {c.url && (
+                            <>
+                              {" "}
+                              <a className="text-blue-400 hover:text-blue-300" href={c.url} target="_blank" rel="noopener noreferrer">
+                                link
+                              </a>
+                            </>
+                          )}
+                          {c.relevance && (
+                            <div className="text-neutral-500">{c.relevance}</div>
+                          )}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
-        ))}
+        )})}
       </div>
 
       {hasWarnings && (

@@ -53,6 +53,22 @@ export interface AnalysisContext {
     source: string;
     description: string;
   };
+  details?: Record<
+    string,
+    {
+      summary?: string;
+      assumptions?: string[];
+      equations?: string[];
+      distributions?: string[];
+      validation_checks?: string[];
+      citations?: Array<{
+        title?: string;
+        url?: string;
+        kind?: string;
+        relevance?: string;
+      }>;
+    }
+  >;
   warnings: string[];
 }
 
