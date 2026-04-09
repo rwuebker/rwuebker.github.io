@@ -48,6 +48,9 @@ interface Message {
   validity?: { status: string; confidence?: string };
   conclusion?: any;
   analysis_context?: AnalysisContext;
+  research_theory?: { name?: string; hypothesis?: string } | null;
+  user_references?: Array<{ title?: string; url?: string; kind?: string }>;
+  citation_audit?: Record<string, any>;
 }
 
 const SYNTHETIC_ALIAS_TO_CANONICAL: Record<string, string> = {
@@ -118,6 +121,9 @@ function buildReportMessage(
     validity: result.validity,
     conclusion: result.conclusion,
     analysis_context: result.analysis_context,
+    ...(result as any).research_theory ? { research_theory: (result as any).research_theory } : {},
+    ...(result as any).user_references ? { user_references: (result as any).user_references } : {},
+    ...(result as any).citation_audit ? { citation_audit: (result as any).citation_audit } : {},
   };
 }
 
@@ -731,12 +737,84 @@ function AnalysisContextBlock({ context }: { context: AnalysisContext | undefine
   );
 }
 
+function ResearchTheoryBlock({
+  theory,
+  references,
+  citationAudit,
+}: {
+  theory: any;
+  references: any[] | undefined;
+  citationAudit: any;
+}) {
+  const hasTheory = theory && (theory.name || theory.hypothesis);
+  const hasRefs = Array.isArray(references) && references.length > 0;
+  const hasAudit = citationAudit && typeof citationAudit === "object";
+
+  if (!hasTheory && !hasRefs && !hasAudit) return null;
+
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3 space-y-2">
+      <h3 className="text-sm font-semibold text-neutral-200">Research Theory</h3>
+      {hasTheory && (
+        <div className="text-xs text-neutral-300 space-y-1">
+          {theory?.name && (
+            <div><span className="text-neutral-400">Theory:</span> {theory.name}</div>
+          )}
+          {theory?.hypothesis && (
+            <div><span className="text-neutral-400">Hypothesis:</span> {theory.hypothesis}</div>
+          )}
+        </div>
+      )}
+      {hasRefs && (
+        <div className="text-xs text-neutral-300">
+          <div className="text-neutral-400 mb-1">User References</div>
+          <ul className="list-disc ml-4 space-y-1">
+            {references!.map((ref: any, idx: number) => (
+              <li key={idx}>
+                {ref.title} ({ref.kind || "secondary"}){" "}
+                {ref.url && (
+                  <a className="text-blue-400 hover:text-blue-300" href={ref.url} target="_blank" rel="noopener noreferrer">
+                    link
+                  </a>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {hasAudit && (
+        <div className="text-xs text-neutral-500 border-t border-neutral-800 pt-2">
+          Citation audit: knowledge primary {citationAudit.knowledge_citations_with_primary ?? 0}/
+          {citationAudit.knowledge_citations_total ?? 0}, user primary {citationAudit.user_references_primary ?? 0}/
+          {citationAudit.user_references_total ?? 0}
+        </div>
+      )}
+    </div>
+  );
+}
+
 async function downloadNotebook(msg: Message) {
   try {
+    const reportPayload = getLastReport() ?? {
+      interpretation: (msg as any).interpretation,
+      metrics: (msg as any).metrics,
+      sections: msg.sections,
+      ui_components: msg.ui_components,
+      _introspection: msg._introspection,
+      source_explanation: msg.source_explanation,
+      data_preview: msg.data_preview,
+      validity: msg.validity,
+      conclusion: msg.conclusion,
+      analysis_context: msg.analysis_context,
+      research_theory: msg.research_theory,
+      user_references: msg.user_references,
+      citation_audit: msg.citation_audit,
+    };
+
     const res = await fetch(`${SIGNALSCOPE_API_BASE}/analyze/notebook`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ report: msg }),
+      body: JSON.stringify({ report: reportPayload }),
     });
 
     if (!res.ok) {
@@ -779,6 +857,9 @@ async function downloadPdfReport(msg: Message) {
       validity: msg.validity,
       conclusion: msg.conclusion,
       analysis_context: msg.analysis_context,
+      research_theory: msg.research_theory,
+      user_references: msg.user_references,
+      citation_audit: msg.citation_audit,
     };
 
     let res = await fetch(`${SIGNALSCOPE_API_BASE}/analyze/report/pdf`, {
@@ -1326,6 +1407,13 @@ export default function SignalScopeDemoPage() {
   const [lastResult, setLastResult] = useState<any>(null);
   const [lastComparison, setLastComparison] = useState<any | null>(null);
   const [customSignal, setCustomSignal] = useState<string>("");
+  const [customDescription, setCustomDescription] = useState<string>("User-defined signal");
+  const [customFrequency, setCustomFrequency] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [customUnits, setCustomUnits] = useState<string>("");
+  const [customTheoryName, setCustomTheoryName] = useState<string>("");
+  const [customHypothesis, setCustomHypothesis] = useState<string>("");
+  const [customReferences, setCustomReferences] = useState<string>("");
+  const [customDataSources, setCustomDataSources] = useState<string>("");
   const [pendingClarification, setPendingClarification] = useState<AskResponse["clarification"] | null>(null);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [synthMode, setSynthMode] = useState(false);
@@ -1729,6 +1817,11 @@ export default function SignalScopeDemoPage() {
                     </div>
                   )}
                   <AnalysisContextBlock context={msg.analysis_context} />
+                  <ResearchTheoryBlock
+                    theory={(msg as any).research_theory}
+                    references={(msg as any).user_references}
+                    citationAudit={(msg as any).citation_audit}
+                  />
                   {msg.ui_components
                     .filter((s: any) => s.id === "llm_interpretation")
                     .map((s: any) => renderSection(s, handleAsk, setActiveSection))}
@@ -1836,10 +1929,62 @@ export default function SignalScopeDemoPage() {
             placeholder={'[{"date":"2020-01-01","asset":"ASSET_000","signal":0.5}]'}
             className="w-full h-28 px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-md text-xs font-mono text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none"
           />
+          <div className="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+            <input
+              type="text"
+              value={customDescription}
+              onChange={(e) => setCustomDescription(e.target.value)}
+              placeholder="Signal description"
+              className="px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-md text-xs text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
+            />
+            <select
+              value={customFrequency}
+              onChange={(e) => setCustomFrequency(e.target.value as "daily" | "weekly" | "monthly")}
+              className="px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-md text-xs text-neutral-300 focus:outline-none focus:border-neutral-600"
+            >
+              <option value="daily">daily</option>
+              <option value="weekly">weekly</option>
+              <option value="monthly">monthly</option>
+            </select>
+            <input
+              type="text"
+              value={customUnits}
+              onChange={(e) => setCustomUnits(e.target.value)}
+              placeholder="Units (optional)"
+              className="px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-md text-xs text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
+            />
+            <input
+              type="text"
+              value={customTheoryName}
+              onChange={(e) => setCustomTheoryName(e.target.value)}
+              placeholder="Theory name (optional)"
+              className="px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-md text-xs text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
+            />
+          </div>
+          <textarea
+            value={customHypothesis}
+            onChange={(e) => setCustomHypothesis(e.target.value)}
+            placeholder="Hypothesis (recommended): e.g., Higher relative-strength assets will outperform over the next month."
+            className="mt-2 w-full h-16 px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-md text-xs text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none"
+          />
+          <input
+            type="text"
+            value={customDataSources}
+            onChange={(e) => setCustomDataSources(e.target.value)}
+            placeholder="Data sources (comma-separated, optional)"
+            className="mt-2 w-full px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-md text-xs text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-neutral-600"
+          />
+          <textarea
+            value={customReferences}
+            onChange={(e) => setCustomReferences(e.target.value)}
+            placeholder={'References JSON (optional): [{"title":"Paper","url":"https://...","kind":"primary"}]'}
+            className="mt-2 w-full h-20 px-3 py-2 bg-neutral-900 border border-neutral-800 rounded-md text-xs font-mono text-neutral-300 placeholder-neutral-600 focus:outline-none focus:border-neutral-600 resize-none"
+          />
           <button
             disabled={loading || !customSignal.trim()}
             onClick={async () => {
               let parsed: any[];
+              let parsedRefs: any[] = [];
               try {
                 parsed = JSON.parse(customSignal);
               } catch {
@@ -1849,9 +1994,37 @@ export default function SignalScopeDemoPage() {
                 ]);
                 return;
               }
+              if (customReferences.trim()) {
+                try {
+                  const refs = JSON.parse(customReferences);
+                  if (!Array.isArray(refs)) throw new Error("References must be a JSON array.");
+                  parsedRefs = refs;
+                } catch {
+                  setMessages((prev) => [
+                    ...prev,
+                    { role: "assistant", content: "Invalid references JSON. Expected an array of {title,url,kind}." },
+                  ]);
+                  return;
+                }
+              }
               setLoading(true);
               try {
-                const result = await executeAction({ action: "analyze_signal", signal: parsed });
+                const result = await executeAction({
+                  action: "analyze_signal",
+                  signal: parsed,
+                  signal_metadata: {
+                    description: customDescription || "User-defined signal",
+                    frequency: customFrequency,
+                    units: customUnits || undefined,
+                    theory_name: customTheoryName || undefined,
+                    hypothesis: customHypothesis || undefined,
+                    references: parsedRefs,
+                    data_sources: customDataSources
+                      .split(",")
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  },
+                });
                 setLastResult(result);
                 setMessages((prev) => [
                   ...prev,

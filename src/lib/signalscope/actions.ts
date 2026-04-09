@@ -39,6 +39,7 @@ export async function executeAction(
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           signal: intent.signal ?? null,
+          signal_metadata: intent.signal_metadata ?? null,
         }),
       }
     );

@@ -3,6 +3,19 @@ export interface IntentAction {
   source?: string;
   explanation?: string;
   signal?: any[];
+  signal_metadata?: {
+    description?: string;
+    frequency?: "daily" | "weekly" | "monthly";
+    units?: string;
+    theory_name?: string;
+    hypothesis?: string;
+    references?: Array<{
+      title: string;
+      url: string;
+      kind?: "primary" | "secondary" | "tertiary";
+    }>;
+    data_sources?: string[];
+  };
   preset?: string;
   params?: Record<string, any>;
 }
