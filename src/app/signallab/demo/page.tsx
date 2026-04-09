@@ -51,6 +51,13 @@ interface Message {
   research_theory?: { name?: string; hypothesis?: string } | null;
   user_references?: Array<{ title?: string; url?: string; kind?: string }>;
   citation_audit?: Record<string, any>;
+  run_id?: string;
+  feature_scope?: {
+    feature_id: string;
+    feature_name?: string;
+    value_column?: string;
+    params?: Record<string, any>;
+  };
 }
 
 const SYNTHETIC_ALIAS_TO_CANONICAL: Record<string, string> = {
@@ -121,6 +128,8 @@ function buildReportMessage(
     validity: result.validity,
     conclusion: result.conclusion,
     analysis_context: result.analysis_context,
+    run_id: (result as any).run_id,
+    feature_scope: (result as any).feature_scope,
     ...(result as any).research_theory ? { research_theory: (result as any).research_theory } : {},
     ...(result as any).user_references ? { user_references: (result as any).user_references } : {},
     ...(result as any).citation_audit ? { citation_audit: (result as any).citation_audit } : {},
@@ -737,6 +746,36 @@ function AnalysisContextBlock({ context }: { context: AnalysisContext | undefine
   );
 }
 
+function FeatureScopeBlock({
+  feature,
+}: {
+  feature: Message["feature_scope"] | undefined;
+}) {
+  if (!feature) return null;
+
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3 space-y-2">
+      <h3 className="text-sm font-semibold text-neutral-200">Feature Engineering</h3>
+      <div className="space-y-1 text-xs text-neutral-300">
+        <div>
+          <span className="text-neutral-400">Feature:</span>{" "}
+          {feature.feature_name || feature.feature_id}
+        </div>
+        <div>
+          <span className="text-neutral-400">Value column:</span>{" "}
+          {feature.value_column || "signal"}
+        </div>
+        {feature.params && Object.keys(feature.params).length > 0 && (
+          <div>
+            <span className="text-neutral-400">Params:</span>{" "}
+            {JSON.stringify(feature.params)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ResearchTheoryBlock({
   theory,
   references,
@@ -795,6 +834,28 @@ function ResearchTheoryBlock({
 
 async function downloadNotebook(msg: Message) {
   try {
+    const runId = (getLastReport() as any)?.run_id ?? msg.run_id;
+    if (runId) {
+      const byRunRes = await fetch(`${SIGNALSCOPE_API_BASE}/analyze/notebook`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ run_id: runId }),
+      });
+      if (byRunRes.ok) {
+        const data = await byRunRes.json();
+        if (data?.notebook) {
+          const blob = new Blob([JSON.stringify(data.notebook, null, 2)], { type: "application/json" });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement("a");
+          a.href = url;
+          a.download = "signalscope_analysis.ipynb";
+          a.click();
+          URL.revokeObjectURL(url);
+          return;
+        }
+      }
+    }
+
     const reportPayload = getLastReport() ?? {
       interpretation: (msg as any).interpretation,
       metrics: (msg as any).metrics,
@@ -846,6 +907,25 @@ async function downloadNotebook(msg: Message) {
 
 async function downloadPdfReport(msg: Message) {
   try {
+    const runId = (getLastReport() as any)?.run_id ?? msg.run_id;
+    if (runId) {
+      const byRunRes = await fetch(`${SIGNALSCOPE_API_BASE}/analyze/report/pdf`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ run_id: runId }),
+      });
+      if (byRunRes.ok) {
+        const blob = await byRunRes.blob();
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "signal_lab_report.pdf";
+        a.click();
+        URL.revokeObjectURL(url);
+        return;
+      }
+    }
+
     const reportPayload = getLastReport() ?? {
       interpretation: (msg as any).interpretation,
       metrics: (msg as any).metrics,
@@ -1735,7 +1815,7 @@ export default function SignalScopeDemoPage() {
         <h1 className="text-2xl font-semibold mb-1">SignalLab Demo</h1>
         <p className="text-neutral-400 text-sm mb-8">
           Try: &quot;analyze linear factor signal&quot; or &quot;analyze noise
-          signal&quot;
+          signal&quot; or &quot;analyze moving average crossover on linear factor&quot;
         </p>
 
         <div className="flex flex-col gap-4 mb-6 min-h-[300px] overflow-anchor-none" style={{ overflowAnchor: "none" }}>
@@ -1817,6 +1897,7 @@ export default function SignalScopeDemoPage() {
                     </div>
                   )}
                   <AnalysisContextBlock context={msg.analysis_context} />
+                  <FeatureScopeBlock feature={msg.feature_scope} />
                   <ResearchTheoryBlock
                     theory={(msg as any).research_theory}
                     references={(msg as any).user_references}

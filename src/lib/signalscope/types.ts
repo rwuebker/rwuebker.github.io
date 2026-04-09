@@ -1,6 +1,7 @@
 export interface IntentAction {
   action: string;
   source?: string;
+  feature_id?: string;
   explanation?: string;
   signal?: any[];
   signal_metadata?: {

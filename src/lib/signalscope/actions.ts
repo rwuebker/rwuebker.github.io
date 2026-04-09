@@ -72,6 +72,29 @@ export async function executeAction(
     return result;
   }
 
+  if (intent.action === "analyze_feature_signal") {
+    const source = intent.source ?? "linear_factor";
+    const featureId = intent.feature_id ?? "moving_average";
+    const params = intent.params ?? {};
+
+    const response = await fetch(
+      `${SIGNALSCOPE_API_BASE}/featurescope/analyze?source=${encodeURIComponent(source)}&feature_id=${encodeURIComponent(featureId)}&value_column=signal`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ params }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`SignalScope feature analysis error: ${response.status}`);
+    }
+
+    const result: SignalScopeReport = await response.json();
+    lastReport = result;
+    return result;
+  }
+
   if (intent.action === "explain_last_result") {
     if (!lastReport) {
       throw new Error("No previous result to explain.");
