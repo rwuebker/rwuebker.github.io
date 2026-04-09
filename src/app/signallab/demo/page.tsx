@@ -59,6 +59,7 @@ interface Message {
     params?: Record<string, any>;
   };
   factorscope_report?: Record<string, any>;
+  returnscope_report?: Record<string, any>;
 }
 
 const SYNTHETIC_ALIAS_TO_CANONICAL: Record<string, string> = {
@@ -132,6 +133,7 @@ function buildReportMessage(
     run_id: (result as any).run_id,
     feature_scope: (result as any).feature_scope,
     factorscope_report: (result as any).factorscope_report,
+    returnscope_report: (result as any).returnscope_report,
     ...(result as any).research_theory ? { research_theory: (result as any).research_theory } : {},
     ...(result as any).user_references ? { user_references: (result as any).user_references } : {},
     ...(result as any).citation_audit ? { citation_audit: (result as any).citation_audit } : {},
@@ -155,6 +157,37 @@ function FactorScopeBlock({
         <div><span className="text-neutral-400">Residual alpha:</span> {Number(ac.residual_alpha ?? 0).toFixed(4)}</div>
         <div><span className="text-neutral-400">Residual alpha t-stat:</span> {Number(ac.residual_alpha_t_stat ?? 0).toFixed(2)}</div>
       </div>
+    </div>
+  );
+}
+
+function ReturnScopeBlock({
+  report,
+}: {
+  report: Record<string, any> | undefined;
+}) {
+  if (!report || !report.returns) return null;
+  const returns = report.returns;
+  const series = Array.isArray(returns.series) ? returns.series : [];
+  const tail = series.slice(-5);
+  return (
+    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3 space-y-2">
+      <h3 className="text-sm font-semibold text-neutral-200">ReturnScope</h3>
+      <div className="space-y-1 text-xs text-neutral-300">
+        <div><span className="text-neutral-400">Periods:</span> {returns.n_periods}</div>
+        <div><span className="text-neutral-400">Mean period return:</span> {Number(returns.mean_period_return ?? 0).toFixed(4)}</div>
+        <div><span className="text-neutral-400">Final cumulative return:</span> {Number(returns.final_cumulative_return ?? 0).toFixed(4)}</div>
+      </div>
+      {tail.length > 0 && (
+        <div className="text-xs text-neutral-400 pt-1 border-t border-neutral-800">
+          Latest series points:
+          {tail.map((row: any) => (
+            <div key={String(row.date)}>
+              {String(row.date)}: r={Number(row.strategy_return ?? 0).toFixed(4)}, cum={Number(row.cumulative_return ?? 0).toFixed(4)}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -1838,7 +1871,7 @@ export default function SignalScopeDemoPage() {
         <h1 className="text-2xl font-semibold mb-1">SignalLab Demo</h1>
         <p className="text-neutral-400 text-sm mb-8">
           Try: &quot;analyze linear factor signal&quot; or &quot;analyze noise
-          signal&quot; or &quot;analyze moving average crossover on linear factor&quot; or &quot;run factor scope after controls&quot;
+          signal&quot; or &quot;analyze moving average crossover on linear factor&quot; or &quot;run factor scope after controls&quot; or &quot;analyze return scope long only monthly&quot;
         </p>
 
         <div className="flex flex-col gap-4 mb-6 min-h-[300px] overflow-anchor-none" style={{ overflowAnchor: "none" }}>
@@ -1864,7 +1897,7 @@ export default function SignalScopeDemoPage() {
                 </div>
               )}
               {/* assistant: ask response (has answer/citations but no ui_components) */}
-              {msg.role === "assistant" && !msg.ui_components?.length && (
+              {msg.role === "assistant" && !msg.ui_components?.length && !msg.factorscope_report && !msg.returnscope_report && (
                 <div className="max-w-2xl">
                   {(msg.section != null || msg.citations?.length) ? (
                     renderAskResponse({
@@ -1880,7 +1913,7 @@ export default function SignalScopeDemoPage() {
                 </div>
               )}
               {/* assistant: report with ui_components */}
-              {msg.role === "assistant" && msg.ui_components && msg.ui_components.length > 0 && (
+              {msg.role === "assistant" && ((msg.ui_components && msg.ui_components.length > 0) || msg.factorscope_report || msg.returnscope_report) && (
                 <div className="mt-1 max-w-2xl space-y-4">
                   {msg.content && (
                     <p className="text-sm text-neutral-400">{msg.content}</p>
@@ -1922,15 +1955,16 @@ export default function SignalScopeDemoPage() {
                   <AnalysisContextBlock context={msg.analysis_context} />
                   <FeatureScopeBlock feature={msg.feature_scope} />
                   <FactorScopeBlock report={msg.factorscope_report} />
+                  <ReturnScopeBlock report={msg.returnscope_report} />
                   <ResearchTheoryBlock
                     theory={(msg as any).research_theory}
                     references={(msg as any).user_references}
                     citationAudit={(msg as any).citation_audit}
                   />
-                  {msg.ui_components
+                  {(msg.ui_components || [])
                     .filter((s: any) => s.id === "llm_interpretation")
                     .map((s: any) => renderSection(s, handleAsk, setActiveSection))}
-                  {msg.ui_components
+                  {(msg.ui_components || [])
                     .filter((s: any) => s.id !== "llm_interpretation" && s.title !== "Leakage Analysis" && s.title !== "IC vs Lag")
                     .map((s: any) => renderSection(s, handleAsk, setActiveSection))}
                   <DataOverview msg={msg} />

@@ -125,6 +125,40 @@ export async function executeAction(
         "FactorScope analysis completed. Review controlled coefficients and residual alpha below.",
       metrics: {},
       factorscope_report: data,
+      ui_components: [{ id: "factorscope", title: "FactorScope" }],
+      sections: [],
+    } as SignalScopeReport;
+    lastReport = result;
+    return result;
+  }
+
+  if (intent.action === "analyze_returnscope") {
+    const source = intent.source ?? "linear_factor";
+    const executionModel = intent.execution_model ?? {};
+    const response = await fetch(
+      `${SIGNALSCOPE_API_BASE}/returnscope/report?source=${encodeURIComponent(source)}`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ execution_model: executionModel }),
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`ReturnScope API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+    if ((data as any).valid === false) {
+      throw new Error((data as any).message ?? "ReturnScope analysis failed.");
+    }
+    const result: SignalScopeReport = {
+      interpretation:
+        "ReturnScope analysis completed. Review strategy return series and cumulative curve below.",
+      metrics: {},
+      returnscope_report: data,
+      run_id: (data as any).run_id,
+      ui_components: [{ id: "returnscope", title: "ReturnScope" }],
       sections: [],
     } as SignalScopeReport;
     lastReport = result;

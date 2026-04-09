@@ -3,6 +3,7 @@ export interface IntentAction {
   source?: string;
   feature_id?: string;
   factor_set?: string;
+  execution_model?: Record<string, any>;
   explanation?: string;
   signal?: any[];
   signal_metadata?: {
@@ -72,5 +73,6 @@ export interface SignalScopeReport {
     details: Record<string, any>;
   };
   factorscope_report?: Record<string, any>;
+  returnscope_report?: Record<string, any>;
   [key: string]: any;
 }
