@@ -64,3 +64,43 @@ export async function setProjectChatMode(
   if (!data.valid) throw new Error(data.reason ?? "Project chat mode update failed");
   return data.state as ResearchProjectState;
 }
+
+export async function getProjectBlockDrilldown(
+  projectId: string,
+  blockId: string
+): Promise<any> {
+  const res = await fetch(
+    `${SIGNALSCOPE_API_BASE}/project/${encodeURIComponent(projectId)}/blocks/${encodeURIComponent(blockId)}/drilldown`
+  );
+  if (!res.ok) throw new Error(`Project block drilldown failed: ${res.status}`);
+  const data = await res.json();
+  if (!data.valid) throw new Error(data.reason ?? "Project block drilldown failed");
+  return data;
+}
+
+export async function getProjectDataProviders(): Promise<any[]> {
+  const res = await fetch(`${SIGNALSCOPE_API_BASE}/project/data/providers`);
+  if (!res.ok) throw new Error(`Provider catalog failed: ${res.status}`);
+  const data = await res.json();
+  if (!data.valid) throw new Error(data.reason ?? "Provider catalog failed");
+  return Array.isArray(data.providers) ? data.providers : [];
+}
+
+export async function createProjectPaperPlan(
+  projectId: string,
+  source: string,
+  includesCodeRepo = false
+): Promise<any> {
+  const res = await fetch(
+    `${SIGNALSCOPE_API_BASE}/project/${encodeURIComponent(projectId)}/paper/plan`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ source, includes_code_repo: includesCodeRepo }),
+    }
+  );
+  if (!res.ok) throw new Error(`Paper plan failed: ${res.status}`);
+  const data = await res.json();
+  if (!data.valid) throw new Error(data.reason ?? "Paper plan failed");
+  return data;
+}

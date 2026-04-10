@@ -8,7 +8,14 @@ import {
 } from "recharts";
 import { routeUserInput } from "@/lib/signalscope/router";
 import { executeAction, getLastReport, askQuestion } from "@/lib/signalscope/actions";
-import { createResearchProject, updateProjectBlock, setProjectChatMode } from "@/lib/signalscope/project";
+import {
+  createResearchProject,
+  updateProjectBlock,
+  setProjectChatMode,
+  getProjectBlockDrilldown,
+  getProjectDataProviders,
+  createProjectPaperPlan,
+} from "@/lib/signalscope/project";
 import ICLagChart from "@/components/ICLagChart";
 import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
 import type { AnalysisContext, AskResponse, SignalScopeReport, ProjectBlockState, ResearchProjectState } from "@/lib/signalscope/types";
@@ -1699,6 +1706,11 @@ export default function SignalScopeDemoPage() {
   const [projectState, setProjectState] = useState<ResearchProjectState | null>(null);
   const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
   const [flashUnlocked, setFlashUnlocked] = useState<Record<string, boolean>>({});
+  const [focusedDrilldown, setFocusedDrilldown] = useState<any | null>(null);
+  const [drillTab, setDrillTab] = useState<"overview" | "assumptions" | "equations" | "distributions" | "citations" | "validation">("overview");
+  const [dataProviders, setDataProviders] = useState<any[]>([]);
+  const [paperSourceInput, setPaperSourceInput] = useState("");
+  const [paperIncludesCodeRepo, setPaperIncludesCodeRepo] = useState(false);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef(0);
@@ -1730,6 +1742,35 @@ export default function SignalScopeDemoPage() {
     }
   }, [projectState]);
 
+  useEffect(() => {
+    async function loadDrilldown() {
+      if (!projectState || !focusedBlockId) {
+        setFocusedDrilldown(null);
+        return;
+      }
+      try {
+        const data = await getProjectBlockDrilldown(projectState.project_id, focusedBlockId);
+        setFocusedDrilldown(data.drilldown ?? null);
+      } catch {
+        setFocusedDrilldown(null);
+      }
+    }
+    loadDrilldown();
+  }, [projectState?.project_id, focusedBlockId, projectState?.updated_at]);
+
+  useEffect(() => {
+    if (!projectMode) return;
+    async function loadProviders() {
+      try {
+        const providers = await getProjectDataProviders();
+        setDataProviders(providers);
+      } catch {
+        setDataProviders([]);
+      }
+    }
+    loadProviders();
+  }, [projectMode]);
+
   async function handleCreateProjectMode() {
     setLoading(true);
     try {
@@ -1742,6 +1783,7 @@ export default function SignalScopeDemoPage() {
       setProjectState(state);
       setProjectMode(true);
       setFocusedBlockId("data");
+      setDrillTab("overview");
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: `Project ${state.project_id} created. Start with the Data block.` },
@@ -1782,6 +1824,28 @@ export default function SignalScopeDemoPage() {
         ...prev,
         { role: "assistant", content: "Could not switch project chat mode." },
       ]);
+    }
+  }
+
+  async function handleCreatePaperPlan() {
+    if (!projectState || !paperSourceInput.trim()) return;
+    setLoading(true);
+    try {
+      const data = await createProjectPaperPlan(
+        projectState.project_id,
+        paperSourceInput.trim(),
+        paperIncludesCodeRepo
+      );
+      setProjectState(data.state);
+      setFocusedBlockId("reproduce_paper_results");
+      setDrillTab("overview");
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Failed to create paper reproduction plan." },
+      ]);
+    } finally {
+      setLoading(false);
     }
   }
 
@@ -2184,7 +2248,10 @@ export default function SignalScopeDemoPage() {
                 {workspaceBlocks.map((block) => (
                   <button
                     key={block.block_id}
-                    onClick={() => setFocusedBlockId(block.block_id)}
+                    onClick={() => {
+                      setFocusedBlockId(block.block_id);
+                      setDrillTab("overview");
+                    }}
                     className={`text-left rounded-md border p-3 transition ${blockStateClass(block.state)} ${flashUnlocked[block.block_id] ? "animate-pulse" : ""}`}
                   >
                     <div className="flex items-center justify-between">
@@ -2199,6 +2266,20 @@ export default function SignalScopeDemoPage() {
                 <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3 space-y-2">
                   <div className="text-sm font-semibold text-neutral-200">{focusedBlock.title} Focus</div>
                   <div className="text-xs text-neutral-400">{focusedBlock.reason}</div>
+                  {focusedBlock.block_id === "data" && dataProviders.length > 0 && (
+                    <div className="rounded border border-neutral-800 bg-neutral-900/60 p-2">
+                      <div className="text-[11px] uppercase tracking-wide text-neutral-500 mb-1">Data Providers</div>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5">
+                        {dataProviders.map((p) => (
+                          <div key={String(p.id)} className={`text-xs rounded border px-2 py-1 ${p.enabled ? "border-emerald-700/60 text-emerald-300" : "border-neutral-700 text-neutral-400"}`}>
+                            <div className="font-medium">{String(p.id)}</div>
+                            <div>{Array.isArray(p.asset_classes) ? p.asset_classes.join(", ") : ""}</div>
+                            <div>{p.enabled ? "enabled" : "planned"}</div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                   {focusedBlock.block_id === "data" && (
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
                       <input id="data_source" placeholder="source (e.g. yfinance)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
@@ -2271,8 +2352,62 @@ export default function SignalScopeDemoPage() {
                       </button>
                     </div>
                   )}
-                  <div className="text-[11px] text-neutral-500">
-                    Drilldowns: assumptions, equations, distributions, citations, and validation details are tied to each block and will expand as research context fills in.
+                  {focusedBlock.block_id === "reproduce_paper_results" && (
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+                      <input
+                        value={paperSourceInput}
+                        onChange={(e) => setPaperSourceInput(e.target.value)}
+                        placeholder="Paper URL/PDF/local path"
+                        className="md:col-span-3 px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs"
+                      />
+                      <label className="flex items-center gap-2 px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs text-neutral-300">
+                        <input
+                          type="checkbox"
+                          checked={paperIncludesCodeRepo}
+                          onChange={(e) => setPaperIncludesCodeRepo(e.target.checked)}
+                        />
+                        code repo
+                      </label>
+                      <button
+                        onClick={handleCreatePaperPlan}
+                        className="md:col-span-4 px-3 py-2 rounded border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800"
+                      >
+                        Build Reproduction Plan
+                      </button>
+                    </div>
+                  )}
+                  <div className="pt-1 border-t border-neutral-800 space-y-2">
+                    <div className="flex flex-wrap gap-1">
+                      {(["overview", "assumptions", "equations", "distributions", "citations", "validation"] as const).map((tab) => (
+                        <button
+                          key={tab}
+                          onClick={() => setDrillTab(tab)}
+                          className={`px-2 py-1 rounded text-[11px] border ${drillTab === tab ? "border-white text-white" : "border-neutral-700 text-neutral-400 hover:text-neutral-200"}`}
+                        >
+                          {tab}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="text-xs text-neutral-300 whitespace-pre-wrap">
+                      {(() => {
+                        if (!focusedDrilldown) return "No drilldown available yet for this block.";
+                        if (drillTab === "overview") {
+                          const d = focusedDrilldown.diagnostics ? `\nDiagnostics: ${JSON.stringify(focusedDrilldown.diagnostics, null, 2)}` : "";
+                          return `${focusedDrilldown.summary ?? ""}${d}`;
+                        }
+                        if (drillTab === "assumptions") return (focusedDrilldown.assumptions || []).join("\n- ").replace(/^/, "- ");
+                        if (drillTab === "equations") return (focusedDrilldown.equations || []).join("\n- ").replace(/^/, "- ");
+                        if (drillTab === "distributions") return (focusedDrilldown.distributions || []).join("\n- ").replace(/^/, "- ");
+                        if (drillTab === "validation") return (focusedDrilldown.validation_checks || []).join("\n- ").replace(/^/, "- ");
+                        if (drillTab === "citations") {
+                          const rows = (focusedDrilldown.citations || []).map(
+                            (c: any) => `- ${c.title || "Untitled"}${c.url ? `\n  ${c.url}` : ""}${c.relevance ? `\n  ${c.relevance}` : ""}`
+                          );
+                          return rows.length ? rows.join("\n") : "No citations attached.";
+                        }
+                        return "";
+                      })()}
+                    </div>
                   </div>
                 </div>
               )}
