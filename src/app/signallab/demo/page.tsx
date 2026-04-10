@@ -15,6 +15,7 @@ import {
   getProjectBlockDrilldown,
   getProjectDataProviders,
   createProjectPaperPlan,
+  runProjectPipeline,
 } from "@/lib/signalscope/project";
 import ICLagChart from "@/components/ICLagChart";
 import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
@@ -1775,6 +1776,7 @@ export default function SignalScopeDemoPage() {
   const [dataProviders, setDataProviders] = useState<any[]>([]);
   const [paperSourceInput, setPaperSourceInput] = useState("");
   const [paperIncludesCodeRepo, setPaperIncludesCodeRepo] = useState(false);
+  const [projectFactorSet, setProjectFactorSet] = useState("ff3");
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef(0);
@@ -1907,6 +1909,29 @@ export default function SignalScopeDemoPage() {
       setMessages((prev) => [
         ...prev,
         { role: "assistant", content: "Failed to create paper reproduction plan." },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRunProjectPipeline() {
+    if (!projectState) return;
+    setLoading(true);
+    try {
+      const data = await runProjectPipeline(projectState.project_id, { factor_set: projectFactorSet });
+      setProjectState(data.state);
+      const report = data.report as SignalScopeReport;
+      setLastResult(report);
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `Project run completed: ${data.run_id}` },
+        buildReportMessage(report),
+      ]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Project run failed. Complete prerequisites and try again." },
       ]);
     } finally {
       setLoading(false);
@@ -2306,6 +2331,21 @@ export default function SignalScopeDemoPage() {
                   className={`px-2 py-1 rounded border ${projectState.chat_mode === "discussion" ? "border-white text-white" : "border-neutral-700 text-neutral-400"}`}
                 >
                   discussion
+                </button>
+                <span className="ml-2">Factor set:</span>
+                <select
+                  value={projectFactorSet}
+                  onChange={(e) => setProjectFactorSet(e.target.value)}
+                  className="px-2 py-1 rounded border border-neutral-700 bg-neutral-900 text-neutral-200"
+                >
+                  <option value="ff3">ff3</option>
+                </select>
+                <button
+                  onClick={handleRunProjectPipeline}
+                  disabled={loading || projectState.chat_mode !== "execution"}
+                  className="ml-1 px-2.5 py-1 rounded border border-neutral-600 text-neutral-200 hover:bg-neutral-800 disabled:opacity-40"
+                >
+                  Run Project
                 </button>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">

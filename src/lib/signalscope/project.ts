@@ -104,3 +104,21 @@ export async function createProjectPaperPlan(
   if (!data.valid) throw new Error(data.reason ?? "Paper plan failed");
   return data;
 }
+
+export async function runProjectPipeline(
+  projectId: string,
+  input?: { source_override?: string; factor_set?: string }
+): Promise<any> {
+  const res = await fetch(
+    `${SIGNALSCOPE_API_BASE}/project/${encodeURIComponent(projectId)}/run`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(input ?? {}),
+    }
+  );
+  if (!res.ok) throw new Error(`Project run failed: ${res.status}`);
+  const data = await res.json();
+  if (!data.valid) throw new Error(data.reason ?? data.message ?? "Project run failed");
+  return data;
+}
