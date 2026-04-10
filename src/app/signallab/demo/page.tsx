@@ -2315,7 +2315,7 @@ export default function SignalScopeDemoPage() {
         </p>
 
         <div className={splitWorkspace ? "grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] gap-4 items-start" : ""}>
-        <div className={`${splitWorkspace ? "lg:order-2 mb-0 rounded-md border border-neutral-800 bg-neutral-900/60 p-3 h-[calc(100vh-190px)] overflow-y-auto" : "mb-6 space-y-3 rounded-md border border-neutral-800 bg-neutral-900/60 p-3"}`}>
+        <div className={`${splitWorkspace ? "lg:order-2 mb-0 rounded-md border border-neutral-800 bg-neutral-900/60 p-3 h-[calc(100vh-190px)] overflow-hidden" : "mb-6 space-y-3 rounded-md border border-neutral-800 bg-neutral-900/60 p-3"}`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs text-neutral-400">Research Project Experience</div>
             <button
@@ -2361,7 +2361,7 @@ export default function SignalScopeDemoPage() {
             </div>
           )}
           {projectMode && projectState && (
-            <div className="space-y-3">
+            <div className="h-full min-h-0 flex flex-col gap-3">
               <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
                 <span className="font-medium text-neutral-200">{projectState.project_id}</span>
                 <span>Chat mode:</span>
@@ -2393,47 +2393,63 @@ export default function SignalScopeDemoPage() {
                   Run Project
                 </button>
               </div>
-              {projectGuidance && (
-                <div className="rounded-md border border-neutral-800 bg-neutral-950 p-2 space-y-1">
-                  <div className="text-xs font-medium text-neutral-300">Guidance</div>
-                  <div className="text-xs text-neutral-400">{projectGuidance.summary}</div>
-                  {projectGuidance.next_block && (
-                    <div className="text-xs text-sky-300">Suggested next block: {projectGuidance.next_block}</div>
-                  )}
-                  <div className="space-y-1">
-                    {(projectGuidance.actions || []).slice(0, 4).map((a) => (
-                      <div key={`${a.block_id}-${a.priority}`} className="text-xs text-neutral-400">
-                        <span className={`${a.priority === "warning" ? "text-yellow-300" : a.priority === "next" ? "text-emerald-300" : "text-neutral-500"}`}>
-                          [{a.priority}]
-                        </span>{" "}
-                        {a.title}: {a.message}
+              {!focusedBlock && (
+                <div className="min-h-0 flex-1 overflow-y-auto space-y-3 pr-1">
+                  {projectGuidance && (
+                    <div className="rounded-md border border-neutral-800 bg-neutral-950 p-2 space-y-1">
+                      <div className="text-xs font-medium text-neutral-300">Guidance</div>
+                      <div className="text-xs text-neutral-400">{projectGuidance.summary}</div>
+                      {projectGuidance.next_block && (
+                        <div className="text-xs text-sky-300">Suggested next block: {projectGuidance.next_block}</div>
+                      )}
+                      <div className="space-y-1">
+                        {(projectGuidance.actions || []).slice(0, 4).map((a) => (
+                          <div key={`${a.block_id}-${a.priority}`} className="text-xs text-neutral-400">
+                            <span className={`${a.priority === "warning" ? "text-yellow-300" : a.priority === "next" ? "text-emerald-300" : "text-neutral-500"}`}>
+                              [{a.priority}]
+                            </span>{" "}
+                            {a.title}: {a.message}
+                          </div>
+                        ))}
                       </div>
+                    </div>
+                  )}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {workspaceBlocks.map((block) => (
+                      <button
+                        key={block.block_id}
+                        onClick={() => {
+                          setFocusedBlockId(block.block_id);
+                          setDrillTab("overview");
+                        }}
+                        className={`text-left rounded-md border p-3 transition ${blockStateClass(block.state)} ${flashUnlocked[block.block_id] ? "animate-pulse" : ""}`}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="text-sm font-semibold text-neutral-100">{block.title}</div>
+                          <div className="text-[10px] uppercase tracking-wide text-neutral-400">{block.state}</div>
+                        </div>
+                        <div className="text-xs text-neutral-400 mt-1">{block.reason}</div>
+                        <div className="text-[11px] mt-2 text-neutral-500">Click to open in full focus</div>
+                      </button>
                     ))}
                   </div>
                 </div>
               )}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
-                {workspaceBlocks.map((block) => (
-                  <button
-                    key={block.block_id}
-                    onClick={() => {
-                      setFocusedBlockId(block.block_id);
-                      setDrillTab("overview");
-                    }}
-                    className={`text-left rounded-md border p-3 transition ${blockStateClass(block.state)} ${flashUnlocked[block.block_id] ? "animate-pulse" : ""}`}
-                  >
-                    <div className="flex items-center justify-between">
-                      <div className="text-sm font-semibold text-neutral-100">{block.title}</div>
-                      <div className="text-[10px] uppercase tracking-wide text-neutral-400">{block.state}</div>
-                    </div>
-                    <div className="text-xs text-neutral-400 mt-1">{block.reason}</div>
-                  </button>
-                ))}
-              </div>
               {focusedBlock && (
-                <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3 space-y-2">
-                  <div className="text-sm font-semibold text-neutral-200">{focusedBlock.title} Focus</div>
-                  <div className="text-xs text-neutral-400">{focusedBlock.reason}</div>
+                <div className="min-h-0 flex-1 rounded-md border border-neutral-800 bg-neutral-950 p-3 flex flex-col gap-3">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="text-sm font-semibold text-neutral-200">{focusedBlock.title}</div>
+                      <div className="text-xs text-neutral-400">{focusedBlock.reason}</div>
+                    </div>
+                    <button
+                      onClick={() => setFocusedBlockId(null)}
+                      className="shrink-0 px-2.5 py-1 rounded border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800"
+                    >
+                      Back to Blocks
+                    </button>
+                  </div>
+                  <div className="min-h-0 flex-1 overflow-y-auto space-y-2 pr-1">
                   {focusedBlock.block_id === "data" && dataProviders.length > 0 && (
                     <div className="rounded border border-neutral-800 bg-neutral-900/60 p-2">
                       <div className="text-[11px] uppercase tracking-wide text-neutral-500 mb-1">Data Providers</div>
@@ -2594,6 +2610,7 @@ export default function SignalScopeDemoPage() {
                         return "";
                       })()}
                     </div>
+                  </div>
                   </div>
                 </div>
               )}
