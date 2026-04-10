@@ -2001,6 +2001,9 @@ export default function SignalScopeDemoPage() {
           Try: &quot;analyze linear factor signal&quot; or &quot;analyze noise
           signal&quot; or &quot;analyze moving average crossover on linear factor&quot; or &quot;run factor scope after controls&quot; or &quot;analyze return scope long only monthly&quot;
         </p>
+        <p className="text-neutral-500 text-xs mb-6">
+          Scope pipeline: DataScope → FeatureScope → SignalScope → FactorScope → ReturnScope
+        </p>
 
         <div className="flex flex-col gap-4 mb-6 min-h-[300px] overflow-anchor-none" style={{ overflowAnchor: "none" }}>
           {messages.length === 0 && (
