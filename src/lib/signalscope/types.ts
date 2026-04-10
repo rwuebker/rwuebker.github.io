@@ -120,3 +120,14 @@ export interface ResearchProjectState {
   }>;
   updated_at: string;
 }
+
+export interface ResearchProjectGuidance {
+  next_block: string | null;
+  summary: string;
+  actions: Array<{
+    block_id: string;
+    title: string;
+    priority: "next" | "warning" | "blocked";
+    message: string;
+  }>;
+}

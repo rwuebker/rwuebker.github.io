@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { SIGNALSCOPE_API_BASE } from "./config";
-import type { ResearchProjectState } from "./types";
+import type { ResearchProjectGuidance, ResearchProjectState } from "./types";
 
 export async function createResearchProject(input: {
   project_id: string;
@@ -121,4 +121,12 @@ export async function runProjectPipeline(
   const data = await res.json();
   if (!data.valid) throw new Error(data.reason ?? data.message ?? "Project run failed");
   return data;
+}
+
+export async function getProjectGuidance(projectId: string): Promise<ResearchProjectGuidance> {
+  const res = await fetch(`${SIGNALSCOPE_API_BASE}/project/${encodeURIComponent(projectId)}/guidance`);
+  if (!res.ok) throw new Error(`Project guidance failed: ${res.status}`);
+  const data = await res.json();
+  if (!data.valid) throw new Error(data.reason ?? "Project guidance failed");
+  return data.guidance as ResearchProjectGuidance;
 }

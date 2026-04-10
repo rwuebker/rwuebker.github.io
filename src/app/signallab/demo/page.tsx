@@ -15,11 +15,12 @@ import {
   getProjectBlockDrilldown,
   getProjectDataProviders,
   createProjectPaperPlan,
+  getProjectGuidance,
   runProjectPipeline,
 } from "@/lib/signalscope/project";
 import ICLagChart from "@/components/ICLagChart";
 import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
-import type { AnalysisContext, AskResponse, SignalScopeReport, ProjectBlockState, ResearchProjectState } from "@/lib/signalscope/types";
+import type { AnalysisContext, AskResponse, SignalScopeReport, ProjectBlockState, ResearchProjectGuidance, ResearchProjectState } from "@/lib/signalscope/types";
 
 interface Citation {
   concept: string;
@@ -1777,6 +1778,7 @@ export default function SignalScopeDemoPage() {
   const [paperSourceInput, setPaperSourceInput] = useState("");
   const [paperIncludesCodeRepo, setPaperIncludesCodeRepo] = useState(false);
   const [projectFactorSet, setProjectFactorSet] = useState("ff3");
+  const [projectGuidance, setProjectGuidance] = useState<ResearchProjectGuidance | null>(null);
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef(0);
@@ -1822,7 +1824,7 @@ export default function SignalScopeDemoPage() {
       }
     }
     loadDrilldown();
-  }, [projectState?.project_id, focusedBlockId, projectState?.updated_at]);
+  }, [projectState, focusedBlockId]);
 
   useEffect(() => {
     if (!projectMode) return;
@@ -1836,6 +1838,22 @@ export default function SignalScopeDemoPage() {
     }
     loadProviders();
   }, [projectMode]);
+
+  useEffect(() => {
+    async function loadGuidance() {
+      if (!projectState) {
+        setProjectGuidance(null);
+        return;
+      }
+      try {
+        const guidance = await getProjectGuidance(projectState.project_id);
+        setProjectGuidance(guidance);
+      } catch {
+        setProjectGuidance(null);
+      }
+    }
+    loadGuidance();
+  }, [projectState]);
 
   async function handleCreateProjectMode() {
     setLoading(true);
@@ -2348,6 +2366,25 @@ export default function SignalScopeDemoPage() {
                   Run Project
                 </button>
               </div>
+              {projectGuidance && (
+                <div className="rounded-md border border-neutral-800 bg-neutral-950 p-2 space-y-1">
+                  <div className="text-xs font-medium text-neutral-300">Guidance</div>
+                  <div className="text-xs text-neutral-400">{projectGuidance.summary}</div>
+                  {projectGuidance.next_block && (
+                    <div className="text-xs text-sky-300">Suggested next block: {projectGuidance.next_block}</div>
+                  )}
+                  <div className="space-y-1">
+                    {(projectGuidance.actions || []).slice(0, 4).map((a) => (
+                      <div key={`${a.block_id}-${a.priority}`} className="text-xs text-neutral-400">
+                        <span className={`${a.priority === "warning" ? "text-yellow-300" : a.priority === "next" ? "text-emerald-300" : "text-neutral-500"}`}>
+                          [{a.priority}]
+                        </span>{" "}
+                        {a.title}: {a.message}
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
                 {workspaceBlocks.map((block) => (
                   <button
@@ -2385,34 +2422,42 @@ export default function SignalScopeDemoPage() {
                     </div>
                   )}
                   {focusedBlock.block_id === "data" && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
                       <input id="data_source" placeholder="source (e.g. yfinance)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
                       <input id="data_provenance" placeholder="provenance (synthetic/real)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
                       <input id="data_frequency" placeholder="frequency (daily)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="data_missing_ratio" placeholder="missing_ratio (0.00)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="data_asset_count" placeholder="asset_count (10)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
                       <button
                         onClick={() => saveFocusedBlockPayload({
                           source: (document.getElementById("data_source") as HTMLInputElement)?.value ?? "",
                           provenance: (document.getElementById("data_provenance") as HTMLInputElement)?.value ?? "",
                           frequency: (document.getElementById("data_frequency") as HTMLInputElement)?.value ?? "",
+                          missing_ratio: Number((document.getElementById("data_missing_ratio") as HTMLInputElement)?.value ?? 0),
+                          asset_count: Number((document.getElementById("data_asset_count") as HTMLInputElement)?.value ?? 0),
                         })}
-                        className="md:col-span-3 px-3 py-2 rounded border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800"
+                        className="md:col-span-5 px-3 py-2 rounded border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800"
                       >
                         Save Data Block
                       </button>
                     </div>
                   )}
                   {focusedBlock.block_id === "universe" && (
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
                       <input id="uni_selection" placeholder="selection (etf_cross_asset)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
                       <input id="uni_rules" placeholder="rules (comma-separated)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
                       <input id="uni_count" placeholder="asset_count (number)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="uni_asset_class" placeholder="asset_class (equities/etf/crypto)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="uni_min_adv" placeholder="min_adv_usd (optional)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
                       <button
                         onClick={() => saveFocusedBlockPayload({
                           selection: (document.getElementById("uni_selection") as HTMLInputElement)?.value ?? "",
                           rules: ((document.getElementById("uni_rules") as HTMLInputElement)?.value ?? "").split(",").map((x) => x.trim()).filter(Boolean),
                           asset_count: Number((document.getElementById("uni_count") as HTMLInputElement)?.value ?? 0),
+                          asset_class: (document.getElementById("uni_asset_class") as HTMLInputElement)?.value ?? "",
+                          min_adv_usd: Number((document.getElementById("uni_min_adv") as HTMLInputElement)?.value ?? 0),
                         })}
-                        className="md:col-span-3 px-3 py-2 rounded border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800"
+                        className="md:col-span-5 px-3 py-2 rounded border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800"
                       >
                         Save Universe Block
                       </button>
@@ -2442,6 +2487,11 @@ export default function SignalScopeDemoPage() {
                       <input id="str_aum" placeholder="aum (100000)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
                       <input id="str_gross" placeholder="gross_exposure (200000)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
                       <input id="str_cost" placeholder="t_cost_bps (10)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="str_rebalance" placeholder="rebalance (daily/weekly/monthly)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="str_holding" placeholder="holding_period (1)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="str_maxpos" placeholder="max_positions (optional)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="str_base_bps" placeholder="cost_base_bps (8)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="str_slippage_bps" placeholder="cost_slippage_bps (4)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
                       <button
                         onClick={() => saveFocusedBlockPayload({
                           side: (document.getElementById("str_side") as HTMLInputElement)?.value ?? "",
@@ -2449,6 +2499,11 @@ export default function SignalScopeDemoPage() {
                           aum: Number((document.getElementById("str_aum") as HTMLInputElement)?.value ?? 0),
                           gross_exposure: Number((document.getElementById("str_gross") as HTMLInputElement)?.value ?? 0),
                           t_cost_bps: Number((document.getElementById("str_cost") as HTMLInputElement)?.value ?? 0),
+                          rebalance_frequency: (document.getElementById("str_rebalance") as HTMLInputElement)?.value ?? "",
+                          holding_period: Number((document.getElementById("str_holding") as HTMLInputElement)?.value ?? 1),
+                          max_positions: Number((document.getElementById("str_maxpos") as HTMLInputElement)?.value ?? 0) || null,
+                          cost_base_bps: Number((document.getElementById("str_base_bps") as HTMLInputElement)?.value ?? 0),
+                          cost_slippage_bps: Number((document.getElementById("str_slippage_bps") as HTMLInputElement)?.value ?? 0),
                         })}
                         className="md:col-span-5 px-3 py-2 rounded border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800"
                       >
