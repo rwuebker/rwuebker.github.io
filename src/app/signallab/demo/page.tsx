@@ -8,9 +8,10 @@ import {
 } from "recharts";
 import { routeUserInput } from "@/lib/signalscope/router";
 import { executeAction, getLastReport, askQuestion } from "@/lib/signalscope/actions";
+import { createResearchProject, updateProjectBlock, setProjectChatMode } from "@/lib/signalscope/project";
 import ICLagChart from "@/components/ICLagChart";
 import { SIGNALSCOPE_API_BASE } from "@/lib/signalscope/config";
-import type { AnalysisContext, AskResponse, SignalScopeReport } from "@/lib/signalscope/types";
+import type { AnalysisContext, AskResponse, SignalScopeReport, ProjectBlockState, ResearchProjectState } from "@/lib/signalscope/types";
 
 interface Citation {
   concept: string;
@@ -1661,6 +1662,14 @@ function renderSection(
   );
 }
 
+function blockStateClass(state: ProjectBlockState["state"]): string {
+  if (state === "complete") return "border-emerald-500/50 bg-emerald-950/20";
+  if (state === "active") return "border-amber-500/60 bg-amber-950/20";
+  if (state === "warning") return "border-yellow-500/60 bg-yellow-950/20";
+  if (state === "unlocked") return "border-sky-500/50 bg-sky-950/20";
+  return "border-neutral-800 bg-neutral-900/70";
+}
+
 export default function SignalScopeDemoPage() {
   console.log("API BASE:", SIGNALSCOPE_API_BASE);
 
@@ -1682,6 +1691,14 @@ export default function SignalScopeDemoPage() {
   const [pendingClarification, setPendingClarification] = useState<AskResponse["clarification"] | null>(null);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [synthMode, setSynthMode] = useState(false);
+  const [projectMode, setProjectMode] = useState(false);
+  const [projectIdInput, setProjectIdInput] = useState("proj_day114");
+  const [projectNameInput, setProjectNameInput] = useState("Research Project");
+  const [projectObjectiveInput, setProjectObjectiveInput] = useState("Design and validate a cited strategy");
+  const [projectHypothesisInput, setProjectHypothesisInput] = useState("");
+  const [projectState, setProjectState] = useState<ResearchProjectState | null>(null);
+  const [focusedBlockId, setFocusedBlockId] = useState<string | null>(null);
+  const [flashUnlocked, setFlashUnlocked] = useState<Record<string, boolean>>({});
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
   const prevMessageCountRef = useRef(0);
@@ -1694,6 +1711,79 @@ export default function SignalScopeDemoPage() {
     }
     prevMessageCountRef.current = current;
   }, [messages]);
+
+  useEffect(() => {
+    if (!projectState) return;
+    const nextFlash: Record<string, boolean> = {};
+    Object.values(projectState.blocks).forEach((block) => {
+      if (block.state === "unlocked") {
+        const latest = projectState.transition_events[projectState.transition_events.length - 1];
+        if (latest && latest.block_id === block.block_id && latest.to_state === "unlocked") {
+          nextFlash[block.block_id] = true;
+        }
+      }
+    });
+    if (Object.keys(nextFlash).length > 0) {
+      setFlashUnlocked(nextFlash);
+      const timer = setTimeout(() => setFlashUnlocked({}), 1800);
+      return () => clearTimeout(timer);
+    }
+  }, [projectState]);
+
+  async function handleCreateProjectMode() {
+    setLoading(true);
+    try {
+      const state = await createResearchProject({
+        project_id: projectIdInput.trim(),
+        name: projectNameInput.trim(),
+        objective: projectObjectiveInput.trim(),
+        hypothesis: projectHypothesisInput.trim() || undefined,
+      });
+      setProjectState(state);
+      setProjectMode(true);
+      setFocusedBlockId("data");
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `Project ${state.project_id} created. Start with the Data block.` },
+      ]);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Could not create project. Try a unique project id." },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function saveFocusedBlockPayload(payload: Record<string, any>) {
+    if (!projectState || !focusedBlockId) return;
+    setLoading(true);
+    try {
+      const state = await updateProjectBlock(projectState.project_id, focusedBlockId, payload);
+      setProjectState(state);
+    } catch (err) {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: `Failed to update ${focusedBlockId}.` },
+      ]);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function switchProjectChatMode(mode: "discussion" | "execution") {
+    if (!projectState) return;
+    try {
+      const state = await setProjectChatMode(projectState.project_id, mode);
+      setProjectState(state);
+    } catch {
+      setMessages((prev) => [
+        ...prev,
+        { role: "assistant", content: "Could not switch project chat mode." },
+      ]);
+    }
+  }
 
   async function handleSynthGenerate(preset: string, params: Record<string, number>) {
     setLoading(true);
@@ -1788,6 +1878,22 @@ export default function SignalScopeDemoPage() {
     setLoading(true);
 
     const q = input.toLowerCase().trim();
+
+    if (
+      projectState?.chat_mode === "discussion" &&
+      /^(analyze|run|generate|recreate|compare|test)\b/.test(normalized)
+    ) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          role: "assistant",
+          content:
+            "Project chat is in discussion mode. Switch to execution mode to run deterministic analyses.",
+        },
+      ]);
+      setLoading(false);
+      return;
+    }
 
     if (q.includes("synthetic signal")) {
       setSynthMode(true);
@@ -1994,6 +2100,11 @@ export default function SignalScopeDemoPage() {
     }
   }
 
+  const workspaceBlocks = projectState
+    ? Object.values(projectState.blocks).sort((a, b) => a.title.localeCompare(b.title))
+    : [];
+  const focusedBlock = focusedBlockId && projectState ? projectState.blocks[focusedBlockId] : null;
+
   return (
     <main className="min-h-screen bg-neutral-950 text-white flex flex-col">
       <div className="max-w-2xl mx-auto w-full px-6 py-12 flex flex-col flex-1">
@@ -2005,6 +2116,169 @@ export default function SignalScopeDemoPage() {
         <p className="text-neutral-500 text-xs mb-6">
           Scope pipeline: DataScope → FeatureScope → SignalScope → FactorScope → ReturnScope
         </p>
+
+        <div className="mb-6 space-y-3 rounded-md border border-neutral-800 bg-neutral-900/60 p-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="text-xs text-neutral-400">Research Project Experience</div>
+            <button
+              onClick={() => setProjectMode((v) => !v)}
+              className="px-2.5 py-1 rounded border border-neutral-700 text-xs text-neutral-300 hover:text-neutral-100 hover:bg-neutral-800"
+            >
+              {projectMode ? "Hide Project Mode" : "Show Project Mode"}
+            </button>
+          </div>
+          {projectMode && !projectState && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <input
+                value={projectIdInput}
+                onChange={(e) => setProjectIdInput(e.target.value)}
+                placeholder="project_id"
+                className="px-3 py-2 bg-neutral-950 border border-neutral-800 rounded text-xs text-neutral-200"
+              />
+              <input
+                value={projectNameInput}
+                onChange={(e) => setProjectNameInput(e.target.value)}
+                placeholder="Project name"
+                className="px-3 py-2 bg-neutral-950 border border-neutral-800 rounded text-xs text-neutral-200"
+              />
+              <input
+                value={projectObjectiveInput}
+                onChange={(e) => setProjectObjectiveInput(e.target.value)}
+                placeholder="Objective"
+                className="md:col-span-2 px-3 py-2 bg-neutral-950 border border-neutral-800 rounded text-xs text-neutral-200"
+              />
+              <input
+                value={projectHypothesisInput}
+                onChange={(e) => setProjectHypothesisInput(e.target.value)}
+                placeholder="Hypothesis (optional)"
+                className="md:col-span-2 px-3 py-2 bg-neutral-950 border border-neutral-800 rounded text-xs text-neutral-200"
+              />
+              <button
+                onClick={handleCreateProjectMode}
+                disabled={loading || !projectIdInput.trim() || !projectNameInput.trim() || !projectObjectiveInput.trim()}
+                className="md:col-span-2 px-3 py-2 rounded bg-white text-black text-xs font-medium disabled:opacity-40"
+              >
+                Create Project
+              </button>
+            </div>
+          )}
+          {projectMode && projectState && (
+            <div className="space-y-3">
+              <div className="flex flex-wrap items-center gap-2 text-xs text-neutral-400">
+                <span className="font-medium text-neutral-200">{projectState.project_id}</span>
+                <span>Chat mode:</span>
+                <button
+                  onClick={() => switchProjectChatMode("execution")}
+                  className={`px-2 py-1 rounded border ${projectState.chat_mode === "execution" ? "border-white text-white" : "border-neutral-700 text-neutral-400"}`}
+                >
+                  execution
+                </button>
+                <button
+                  onClick={() => switchProjectChatMode("discussion")}
+                  className={`px-2 py-1 rounded border ${projectState.chat_mode === "discussion" ? "border-white text-white" : "border-neutral-700 text-neutral-400"}`}
+                >
+                  discussion
+                </button>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                {workspaceBlocks.map((block) => (
+                  <button
+                    key={block.block_id}
+                    onClick={() => setFocusedBlockId(block.block_id)}
+                    className={`text-left rounded-md border p-3 transition ${blockStateClass(block.state)} ${flashUnlocked[block.block_id] ? "animate-pulse" : ""}`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="text-sm font-semibold text-neutral-100">{block.title}</div>
+                      <div className="text-[10px] uppercase tracking-wide text-neutral-400">{block.state}</div>
+                    </div>
+                    <div className="text-xs text-neutral-400 mt-1">{block.reason}</div>
+                  </button>
+                ))}
+              </div>
+              {focusedBlock && (
+                <div className="rounded-md border border-neutral-800 bg-neutral-950 p-3 space-y-2">
+                  <div className="text-sm font-semibold text-neutral-200">{focusedBlock.title} Focus</div>
+                  <div className="text-xs text-neutral-400">{focusedBlock.reason}</div>
+                  {focusedBlock.block_id === "data" && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <input id="data_source" placeholder="source (e.g. yfinance)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="data_provenance" placeholder="provenance (synthetic/real)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="data_frequency" placeholder="frequency (daily)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <button
+                        onClick={() => saveFocusedBlockPayload({
+                          source: (document.getElementById("data_source") as HTMLInputElement)?.value ?? "",
+                          provenance: (document.getElementById("data_provenance") as HTMLInputElement)?.value ?? "",
+                          frequency: (document.getElementById("data_frequency") as HTMLInputElement)?.value ?? "",
+                        })}
+                        className="md:col-span-3 px-3 py-2 rounded border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800"
+                      >
+                        Save Data Block
+                      </button>
+                    </div>
+                  )}
+                  {focusedBlock.block_id === "universe" && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <input id="uni_selection" placeholder="selection (etf_cross_asset)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="uni_rules" placeholder="rules (comma-separated)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="uni_count" placeholder="asset_count (number)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <button
+                        onClick={() => saveFocusedBlockPayload({
+                          selection: (document.getElementById("uni_selection") as HTMLInputElement)?.value ?? "",
+                          rules: ((document.getElementById("uni_rules") as HTMLInputElement)?.value ?? "").split(",").map((x) => x.trim()).filter(Boolean),
+                          asset_count: Number((document.getElementById("uni_count") as HTMLInputElement)?.value ?? 0),
+                        })}
+                        className="md:col-span-3 px-3 py-2 rounded border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800"
+                      >
+                        Save Universe Block
+                      </button>
+                    </div>
+                  )}
+                  {focusedBlock.block_id === "return_definition" && (
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                      <input id="ret_convention" placeholder="convention (close_to_close)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="ret_horizon" placeholder="horizon (1d)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="ret_alignment" placeholder="alignment (t_to_t1)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <button
+                        onClick={() => saveFocusedBlockPayload({
+                          convention: (document.getElementById("ret_convention") as HTMLInputElement)?.value ?? "",
+                          horizon: (document.getElementById("ret_horizon") as HTMLInputElement)?.value ?? "",
+                          alignment: (document.getElementById("ret_alignment") as HTMLInputElement)?.value ?? "",
+                        })}
+                        className="md:col-span-3 px-3 py-2 rounded border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800"
+                      >
+                        Save Return Definition Block
+                      </button>
+                    </div>
+                  )}
+                  {focusedBlock.block_id === "strategy_builder" && (
+                    <div className="grid grid-cols-1 md:grid-cols-5 gap-2">
+                      <input id="str_side" placeholder="side (long_only/long_short)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="str_weighting" placeholder="weighting (equal_weight)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="str_aum" placeholder="aum (100000)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="str_gross" placeholder="gross_exposure (200000)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <input id="str_cost" placeholder="t_cost_bps (10)" className="px-2 py-1.5 bg-neutral-900 border border-neutral-800 rounded text-xs" />
+                      <button
+                        onClick={() => saveFocusedBlockPayload({
+                          side: (document.getElementById("str_side") as HTMLInputElement)?.value ?? "",
+                          weighting: (document.getElementById("str_weighting") as HTMLInputElement)?.value ?? "",
+                          aum: Number((document.getElementById("str_aum") as HTMLInputElement)?.value ?? 0),
+                          gross_exposure: Number((document.getElementById("str_gross") as HTMLInputElement)?.value ?? 0),
+                          t_cost_bps: Number((document.getElementById("str_cost") as HTMLInputElement)?.value ?? 0),
+                        })}
+                        className="md:col-span-5 px-3 py-2 rounded border border-neutral-700 text-xs text-neutral-200 hover:bg-neutral-800"
+                      >
+                        Save Strategy Builder Block
+                      </button>
+                    </div>
+                  )}
+                  <div className="text-[11px] text-neutral-500">
+                    Drilldowns: assumptions, equations, distributions, citations, and validation details are tied to each block and will expand as research context fills in.
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
 
         <div className="flex flex-col gap-4 mb-6 min-h-[300px] overflow-anchor-none" style={{ overflowAnchor: "none" }}>
           {messages.length === 0 && (

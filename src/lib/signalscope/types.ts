@@ -94,3 +94,29 @@ export interface SignalScopeReport {
   returnscope_report?: Record<string, any>;
   [key: string]: any;
 }
+
+export interface ProjectBlockState {
+  block_id: string;
+  title: string;
+  state: "locked" | "unlocked" | "active" | "complete" | "warning";
+  reason_code: string;
+  reason: string;
+  prerequisites: string[];
+  completion: Record<string, boolean>;
+  payload: Record<string, any>;
+  updated_at: string;
+}
+
+export interface ResearchProjectState {
+  project_id: string;
+  chat_mode: "discussion" | "execution";
+  blocks: Record<string, ProjectBlockState>;
+  transition_events: Array<{
+    timestamp: string;
+    block_id: string;
+    from_state: string;
+    to_state: string;
+    reason: string;
+  }>;
+  updated_at: string;
+}
