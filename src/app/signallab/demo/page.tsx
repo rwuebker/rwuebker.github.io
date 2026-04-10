@@ -10,6 +10,7 @@ import { routeUserInput } from "@/lib/signalscope/router";
 import { executeAction, getLastReport, askQuestion } from "@/lib/signalscope/actions";
 import {
   createResearchProject,
+  getResearchProjectState,
   updateProjectBlock,
   setProjectChatMode,
   getProjectBlockDrilldown,
@@ -1765,7 +1766,10 @@ export default function SignalScopeDemoPage() {
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [synthMode, setSynthMode] = useState(false);
   const [projectMode, setProjectMode] = useState(true);
-  const [projectIdInput, setProjectIdInput] = useState("proj_day114");
+  const [projectIdInput, setProjectIdInput] = useState(() => {
+    const stamp = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
+    return `proj_${stamp}`;
+  });
   const [projectNameInput, setProjectNameInput] = useState("Research Project");
   const [projectObjectiveInput, setProjectObjectiveInput] = useState("Design and validate a cited strategy");
   const [projectHypothesisInput, setProjectHypothesisInput] = useState("");
@@ -1857,9 +1861,10 @@ export default function SignalScopeDemoPage() {
 
   async function handleCreateProjectMode() {
     setLoading(true);
+    const trimmedProjectId = projectIdInput.trim();
     try {
       const state = await createResearchProject({
-        project_id: projectIdInput.trim(),
+        project_id: trimmedProjectId,
         name: projectNameInput.trim(),
         objective: projectObjectiveInput.trim(),
         hypothesis: projectHypothesisInput.trim() || undefined,
@@ -1873,10 +1878,30 @@ export default function SignalScopeDemoPage() {
         { role: "assistant", content: `Project ${state.project_id} created. Start with the Data block.` },
       ]);
     } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: "Could not create project. Try a unique project id." },
-      ]);
+      const message = err instanceof Error ? err.message : "";
+      if (message.includes("project_exists")) {
+        try {
+          const existing = await getResearchProjectState(trimmedProjectId);
+          setProjectState(existing);
+          setProjectMode(true);
+          setFocusedBlockId("data");
+          setDrillTab("overview");
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: `Loaded existing project ${trimmedProjectId}.` },
+          ]);
+        } catch {
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: "Project id already exists, but loading failed. Try a new id." },
+          ]);
+        }
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: "Could not create project. Try a unique project id." },
+        ]);
+      }
     } finally {
       setLoading(false);
     }
