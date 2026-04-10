@@ -1764,7 +1764,7 @@ export default function SignalScopeDemoPage() {
   const [pendingClarification, setPendingClarification] = useState<AskResponse["clarification"] | null>(null);
   const [activeSection, setActiveSection] = useState<string | null>(null);
   const [synthMode, setSynthMode] = useState(false);
-  const [projectMode, setProjectMode] = useState(false);
+  const [projectMode, setProjectMode] = useState(true);
   const [projectIdInput, setProjectIdInput] = useState("proj_day114");
   const [projectNameInput, setProjectNameInput] = useState("Research Project");
   const [projectObjectiveInput, setProjectObjectiveInput] = useState("Design and validate a cited strategy");
@@ -2275,10 +2275,11 @@ export default function SignalScopeDemoPage() {
     ? Object.values(projectState.blocks).sort((a, b) => a.title.localeCompare(b.title))
     : [];
   const focusedBlock = focusedBlockId && projectState ? projectState.blocks[focusedBlockId] : null;
+  const splitWorkspace = projectMode && projectState;
 
   return (
     <main className="min-h-screen bg-neutral-950 text-white flex flex-col">
-      <div className="max-w-2xl mx-auto w-full px-6 py-12 flex flex-col flex-1">
+      <div className={`${splitWorkspace ? "w-full px-4 py-4" : "max-w-2xl mx-auto w-full px-6 py-12"} flex flex-col flex-1`}>
         <h1 className="text-2xl font-semibold mb-1">SignalLab Demo</h1>
         <p className="text-neutral-400 text-sm mb-8">
           Try: &quot;analyze linear factor signal&quot; or &quot;analyze noise
@@ -2288,7 +2289,8 @@ export default function SignalScopeDemoPage() {
           Scope pipeline: DataScope → FeatureScope → SignalScope → FactorScope → ReturnScope
         </p>
 
-        <div className="mb-6 space-y-3 rounded-md border border-neutral-800 bg-neutral-900/60 p-3">
+        <div className={splitWorkspace ? "grid grid-cols-1 lg:grid-cols-[420px_minmax(0,1fr)] gap-4 items-start" : ""}>
+        <div className={`${splitWorkspace ? "lg:order-2 mb-0 rounded-md border border-neutral-800 bg-neutral-900/60 p-3 h-[calc(100vh-190px)] overflow-y-auto" : "mb-6 space-y-3 rounded-md border border-neutral-800 bg-neutral-900/60 p-3"}`}>
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="text-xs text-neutral-400">Research Project Experience</div>
             <button
@@ -2573,8 +2575,8 @@ export default function SignalScopeDemoPage() {
             </div>
           )}
         </div>
-
-        <div className="flex flex-col gap-4 mb-6 min-h-[300px] overflow-anchor-none" style={{ overflowAnchor: "none" }}>
+        <div className={splitWorkspace ? "lg:order-1 rounded-md border border-neutral-800 bg-neutral-950 p-3 h-[calc(100vh-190px)] flex flex-col" : ""}>
+        <div className={`flex flex-col gap-4 mb-6 overflow-anchor-none ${splitWorkspace ? "min-h-0 flex-1 overflow-y-auto" : "min-h-[300px]"}`} style={{ overflowAnchor: "none" }}>
           {messages.length === 0 && (
             <p className="text-neutral-600 text-sm">No messages yet.</p>
           )}
@@ -2734,7 +2736,7 @@ export default function SignalScopeDemoPage() {
           <div ref={chatEndRef} />
         </div>
 
-        {synthMode && (
+        {synthMode && !splitWorkspace && (
           <SyntheticGenerator
             loading={loading}
             onGenerate={handleSynthGenerate}
@@ -2742,7 +2744,7 @@ export default function SignalScopeDemoPage() {
           />
         )}
 
-        <form onSubmit={handleSubmit} className="flex gap-3">
+        <form onSubmit={handleSubmit} className={`flex gap-3 ${splitWorkspace ? "mt-auto" : ""}`}>
           <input
             type="text"
             value={input}
@@ -2759,7 +2761,8 @@ export default function SignalScopeDemoPage() {
             Send
           </button>
         </form>
-
+        </div>
+        {!splitWorkspace && (
         <div className="mt-6 border-t border-neutral-800 pt-5">
           <div className="text-xs text-neutral-500 font-medium mb-2">Paste custom signal (JSON)</div>
           <textarea
@@ -2885,6 +2888,8 @@ export default function SignalScopeDemoPage() {
           >
             Analyze Custom Signal
           </button>
+        </div>
+        )}
         </div>
       </div>
     </main>
