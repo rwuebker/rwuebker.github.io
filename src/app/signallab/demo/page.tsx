@@ -4,7 +4,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip,
-  ScatterChart, Scatter, CartesianGrid, ResponsiveContainer,
+  ScatterChart, Scatter, CartesianGrid, ResponsiveContainer, LineChart, Line,
 } from "recharts";
 import { routeUserInput } from "@/lib/signalscope/router";
 import { executeAction, getLastReport, askQuestion } from "@/lib/signalscope/actions";
@@ -1363,7 +1363,27 @@ function Charts({ msg }: { msg: Message }) {
     });
   }
 
-  if (quantiles.length === 0 && scatter.length === 0) return null;
+  const returnSeries: Array<{
+    date: string;
+    cumulative_net_return: number;
+    drawdown: number;
+    turnover: number;
+  }> = [];
+  const rawSeries = msg.returnscope_report?.returns?.series;
+  if (Array.isArray(rawSeries)) {
+    rawSeries.forEach((row: any) => {
+      const date = String(row.date ?? "");
+      if (!date) return;
+      returnSeries.push({
+        date,
+        cumulative_net_return: Number(row.cumulative_net_return ?? 0),
+        drawdown: Number(row.drawdown ?? 0),
+        turnover: Number(row.turnover ?? 0),
+      });
+    });
+  }
+
+  if (quantiles.length === 0 && scatter.length === 0 && returnSeries.length === 0) return null;
 
   return (
     <div className="mt-3 rounded-md border border-neutral-800 bg-neutral-950 p-3 space-y-5">
@@ -1425,6 +1445,50 @@ function Charts({ msg }: { msg: Message }) {
               <Scatter data={scatter} fill="#6366f1" opacity={0.7} />
             </ScatterChart>
           </ResponsiveContainer>
+        </div>
+      )}
+
+      {returnSeries.length > 0 && (
+        <div className="space-y-5">
+          <div className="mt-1">
+            <h4 className="text-xs font-semibold text-neutral-300 mb-0.5">Backtest: Cumulative Net Return</h4>
+            <p className="text-xs text-neutral-500 mb-2">Net of transaction costs using current execution model assumptions</p>
+            <ResponsiveContainer width="100%" height={190}>
+              <LineChart data={returnSeries} margin={{ top: 4, right: 16, bottom: 24, left: 48 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
+                <XAxis dataKey="date" tick={AXIS_STYLE} hide />
+                <YAxis tick={AXIS_STYLE} tickFormatter={(v) => v.toFixed(3)} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} formatter={TOOLTIP_FORMATTER} />
+                <Line type="monotone" dataKey="cumulative_net_return" stroke="#22c55e" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-1">
+            <h4 className="text-xs font-semibold text-neutral-300 mb-0.5">Backtest: Drawdown</h4>
+            <p className="text-xs text-neutral-500 mb-2">Peak-to-trough path of the strategy equity curve</p>
+            <ResponsiveContainer width="100%" height={170}>
+              <LineChart data={returnSeries} margin={{ top: 4, right: 16, bottom: 24, left: 48 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
+                <XAxis dataKey="date" tick={AXIS_STYLE} hide />
+                <YAxis tick={AXIS_STYLE} tickFormatter={(v) => v.toFixed(3)} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} formatter={TOOLTIP_FORMATTER} />
+                <Line type="monotone" dataKey="drawdown" stroke="#f97316" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
+          <div className="mt-1">
+            <h4 className="text-xs font-semibold text-neutral-300 mb-0.5">Backtest: Turnover</h4>
+            <p className="text-xs text-neutral-500 mb-2">One-way turnover per rebalance period used for cost estimation</p>
+            <ResponsiveContainer width="100%" height={170}>
+              <LineChart data={returnSeries} margin={{ top: 4, right: 16, bottom: 24, left: 48 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#2a2a2a" />
+                <XAxis dataKey="date" tick={AXIS_STYLE} hide />
+                <YAxis tick={AXIS_STYLE} tickFormatter={(v) => v.toFixed(3)} />
+                <Tooltip contentStyle={TOOLTIP_STYLE} formatter={TOOLTIP_FORMATTER} />
+                <Line type="monotone" dataKey="turnover" stroke="#38bdf8" strokeWidth={2} dot={false} />
+              </LineChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
     </div>
