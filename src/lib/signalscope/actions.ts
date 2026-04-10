@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { IntentAction, SignalScopeReport, AskResponse } from "./types";
 import { SIGNALSCOPE_API_BASE } from "./config";
 

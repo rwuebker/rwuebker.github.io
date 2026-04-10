@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import { SIGNALSCOPE_API_BASE } from "./config";
 import { getLastReport, askQuestion } from "./actions";
 import { AskResponse } from "./types";
