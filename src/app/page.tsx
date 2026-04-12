@@ -51,7 +51,7 @@ export default function Home() {
         {/* WHAT I'M BUILDING TOWARD */}
         <section className="mt-28 pb-20">
           <h2 className="text-lg font-semibold text-neutral-300 mb-10 tracking-wide">
-            What I&apos;m Building Toward
+            Interests:
           </h2>
 
           <div className="space-y-8 max-w-2xl">
