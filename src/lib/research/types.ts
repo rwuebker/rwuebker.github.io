@@ -74,7 +74,7 @@ export interface AnalysisContext {
   warnings: string[];
 }
 
-export interface SignalScopeReport {
+export interface ResearchReport {
   interpretation: string;
   metrics: {
     ic?: number;

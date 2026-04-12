@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { SIGNALSCOPE_API_BASE } from "./config";
+import { RESEARCH_API_BASE } from "./config";
 import { getLastReport, askQuestion } from "./actions";
 import { AskResponse } from "./types";
 
@@ -36,7 +36,7 @@ export async function routeUserInput(
 
   // Fall back to /chat/route for analysis intents.
   try {
-    const res = await fetch(`${SIGNALSCOPE_API_BASE}/chat/route`, {
+    const res = await fetch(`${RESEARCH_API_BASE}/chat/route`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ message }),

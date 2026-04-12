@@ -1,5 +1,5 @@
 import { redirect } from "next/navigation";
 
-export default function SignalScopeProjectRedirectPage() {
-  redirect("/projects/signallab");
+export default function ResearchProjectRedirectPage() {
+  redirect("/projects/research-lab");
 }

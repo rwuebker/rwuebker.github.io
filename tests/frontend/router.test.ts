@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { routeUserInput } from "../../src/lib/signalscope/router";
+import { routeUserInput } from "../../src/lib/research/router";
 
 beforeEach(() => {
   vi.restoreAllMocks();

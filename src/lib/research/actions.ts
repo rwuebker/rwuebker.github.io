@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { IntentAction, SignalScopeReport, AskResponse } from "./types";
-import { SIGNALSCOPE_API_BASE } from "./config";
+import { IntentAction, ResearchReport, AskResponse } from "./types";
+import { RESEARCH_API_BASE } from "./config";
 
 // Module-level cache; replaced by session state in a future iteration.
 let lastReport: any = null;
@@ -15,14 +15,14 @@ export async function askQuestion(
   report: any,
   section?: string
 ): Promise<AskResponse> {
-  const response = await fetch(`${SIGNALSCOPE_API_BASE}/analyze/ask`, {
+  const response = await fetch(`${RESEARCH_API_BASE}/analyze/ask`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ question, report, ...(section ? { section } : {}) }),
   });
 
   if (!response.ok) {
-    throw new Error(`SignalScope ask error: ${response.status}`);
+    throw new Error(`Research ask error: ${response.status}`);
   }
 
   return response.json();
@@ -30,12 +30,12 @@ export async function askQuestion(
 
 export async function executeAction(
   intent: IntentAction
-): Promise<SignalScopeReport> {
+): Promise<ResearchReport> {
   if (intent.action === "analyze_signal") {
     const source = intent.source ?? "noise";
 
     const response = await fetch(
-      `${SIGNALSCOPE_API_BASE}/analyze/report?source=${encodeURIComponent(source)}`,
+      `${RESEARCH_API_BASE}/analyze/report?source=${encodeURIComponent(source)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -47,12 +47,12 @@ export async function executeAction(
     );
 
     if (!response.ok) {
-      throw new Error(`SignalScope API error: ${response.status}`);
+      throw new Error(`Research API error: ${response.status}`);
     }
 
-    const result: SignalScopeReport = await response.json();
+    const result: ResearchReport = await response.json();
     if ((result as any).valid === false) {
-      throw new Error((result as any).message ?? "SignalScope analysis failed.");
+      throw new Error((result as any).message ?? "Research analysis failed.");
     }
     lastReport = result;
     return result;
@@ -62,19 +62,19 @@ export async function executeAction(
     const preset = intent.preset ?? "noise";
     const params = intent.params ?? {};
 
-    const response = await fetch(`${SIGNALSCOPE_API_BASE}/generate/analyze`, {
+    const response = await fetch(`${RESEARCH_API_BASE}/generate/analyze`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ preset, params }),
     });
 
     if (!response.ok) {
-      throw new Error(`SignalScope generate error: ${response.status}`);
+      throw new Error(`Research generate error: ${response.status}`);
     }
 
-    const result: SignalScopeReport = await response.json();
+    const result: ResearchReport = await response.json();
     if ((result as any).valid === false) {
-      throw new Error((result as any).message ?? "SignalScope generation failed.");
+      throw new Error((result as any).message ?? "Research generation failed.");
     }
     lastReport = result;
     return result;
@@ -86,7 +86,7 @@ export async function executeAction(
     const params = intent.params ?? {};
 
     const response = await fetch(
-      `${SIGNALSCOPE_API_BASE}/featurescope/analyze?source=${encodeURIComponent(source)}&feature_id=${encodeURIComponent(featureId)}&value_column=signal`,
+      `${RESEARCH_API_BASE}/featurescope/analyze?source=${encodeURIComponent(source)}&feature_id=${encodeURIComponent(featureId)}&value_column=signal`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -95,10 +95,10 @@ export async function executeAction(
     );
 
     if (!response.ok) {
-      throw new Error(`SignalScope feature analysis error: ${response.status}`);
+      throw new Error(`Research feature analysis error: ${response.status}`);
     }
 
-    const result: SignalScopeReport = await response.json();
+    const result: ResearchReport = await response.json();
     if ((result as any).valid === false) {
       throw new Error((result as any).message ?? "Feature analysis failed.");
     }
@@ -110,7 +110,7 @@ export async function executeAction(
     const source = intent.source ?? "linear_factor";
     const factorSet = intent.factor_set ?? "ff3";
     const response = await fetch(
-      `${SIGNALSCOPE_API_BASE}/factorscope/report?source=${encodeURIComponent(source)}&factor_set=${encodeURIComponent(factorSet)}`,
+      `${RESEARCH_API_BASE}/factorscope/report?source=${encodeURIComponent(source)}&factor_set=${encodeURIComponent(factorSet)}`,
       { method: "POST" }
     );
 
@@ -122,14 +122,14 @@ export async function executeAction(
     if ((data as any).valid === false) {
       throw new Error((data as any).message ?? "FactorScope analysis failed.");
     }
-    const result: SignalScopeReport = {
+    const result: ResearchReport = {
       interpretation:
         "FactorScope analysis completed. Review controlled coefficients and residual alpha below.",
       metrics: {},
       factorscope_report: data,
       ui_components: [{ id: "factorscope", title: "FactorScope" }],
       sections: [],
-    } as SignalScopeReport;
+    } as ResearchReport;
     lastReport = result;
     return result;
   }
@@ -138,7 +138,7 @@ export async function executeAction(
     const source = intent.source ?? "linear_factor";
     const executionModel = intent.execution_model ?? {};
     const response = await fetch(
-      `${SIGNALSCOPE_API_BASE}/returnscope/report?source=${encodeURIComponent(source)}`,
+      `${RESEARCH_API_BASE}/returnscope/report?source=${encodeURIComponent(source)}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -154,7 +154,7 @@ export async function executeAction(
     if ((data as any).valid === false) {
       throw new Error((data as any).message ?? "ReturnScope analysis failed.");
     }
-    const result: SignalScopeReport = {
+    const result: ResearchReport = {
       interpretation:
         "ReturnScope analysis completed. Review strategy return series and cumulative curve below.",
       metrics: {},
@@ -162,7 +162,7 @@ export async function executeAction(
       run_id: (data as any).run_id,
       ui_components: [{ id: "returnscope", title: "ReturnScope" }],
       sections: [],
-    } as SignalScopeReport;
+    } as ResearchReport;
     lastReport = result;
     return result;
   }

@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
-import { SIGNALSCOPE_API_BASE } from "./config";
+import { RESEARCH_API_BASE } from "./config";
 import type { ResearchProjectGuidance, ResearchProjectState } from "./types";
 
 export async function createResearchProject(input: {
@@ -9,7 +9,7 @@ export async function createResearchProject(input: {
   objective: string;
   hypothesis?: string;
 }): Promise<ResearchProjectState> {
-  const res = await fetch(`${SIGNALSCOPE_API_BASE}/project/create`, {
+  const res = await fetch(`${RESEARCH_API_BASE}/project/create`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -21,7 +21,7 @@ export async function createResearchProject(input: {
 }
 
 export async function getResearchProjectState(projectId: string): Promise<ResearchProjectState> {
-  const res = await fetch(`${SIGNALSCOPE_API_BASE}/project/${encodeURIComponent(projectId)}/state`);
+  const res = await fetch(`${RESEARCH_API_BASE}/project/${encodeURIComponent(projectId)}/state`);
   if (!res.ok) throw new Error(`Project state fetch failed: ${res.status}`);
   const payload = await res.json();
   if (!payload.valid) throw new Error(payload.reason ?? "Project state not found");
@@ -34,7 +34,7 @@ export async function updateProjectBlock(
   payload: Record<string, any>
 ): Promise<ResearchProjectState> {
   const res = await fetch(
-    `${SIGNALSCOPE_API_BASE}/project/${encodeURIComponent(projectId)}/blocks/${encodeURIComponent(blockId)}`,
+    `${RESEARCH_API_BASE}/project/${encodeURIComponent(projectId)}/blocks/${encodeURIComponent(blockId)}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -52,7 +52,7 @@ export async function setProjectChatMode(
   mode: "discussion" | "execution"
 ): Promise<ResearchProjectState> {
   const res = await fetch(
-    `${SIGNALSCOPE_API_BASE}/project/${encodeURIComponent(projectId)}/chat_mode`,
+    `${RESEARCH_API_BASE}/project/${encodeURIComponent(projectId)}/chat_mode`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -70,7 +70,7 @@ export async function getProjectBlockDrilldown(
   blockId: string
 ): Promise<any> {
   const res = await fetch(
-    `${SIGNALSCOPE_API_BASE}/project/${encodeURIComponent(projectId)}/blocks/${encodeURIComponent(blockId)}/drilldown`
+    `${RESEARCH_API_BASE}/project/${encodeURIComponent(projectId)}/blocks/${encodeURIComponent(blockId)}/drilldown`
   );
   if (!res.ok) throw new Error(`Project block drilldown failed: ${res.status}`);
   const data = await res.json();
@@ -79,7 +79,7 @@ export async function getProjectBlockDrilldown(
 }
 
 export async function getProjectDataProviders(): Promise<any[]> {
-  const res = await fetch(`${SIGNALSCOPE_API_BASE}/project/data/providers`);
+  const res = await fetch(`${RESEARCH_API_BASE}/project/data/providers`);
   if (!res.ok) throw new Error(`Provider catalog failed: ${res.status}`);
   const data = await res.json();
   if (!data.valid) throw new Error(data.reason ?? "Provider catalog failed");
@@ -92,7 +92,7 @@ export async function createProjectPaperPlan(
   includesCodeRepo = false
 ): Promise<any> {
   const res = await fetch(
-    `${SIGNALSCOPE_API_BASE}/project/${encodeURIComponent(projectId)}/paper/plan`,
+    `${RESEARCH_API_BASE}/project/${encodeURIComponent(projectId)}/paper/plan`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -110,7 +110,7 @@ export async function runProjectPipeline(
   input?: { source_override?: string; factor_set?: string }
 ): Promise<any> {
   const res = await fetch(
-    `${SIGNALSCOPE_API_BASE}/project/${encodeURIComponent(projectId)}/run`,
+    `${RESEARCH_API_BASE}/project/${encodeURIComponent(projectId)}/run`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -124,7 +124,7 @@ export async function runProjectPipeline(
 }
 
 export async function getProjectGuidance(projectId: string): Promise<ResearchProjectGuidance> {
-  const res = await fetch(`${SIGNALSCOPE_API_BASE}/project/${encodeURIComponent(projectId)}/guidance`);
+  const res = await fetch(`${RESEARCH_API_BASE}/project/${encodeURIComponent(projectId)}/guidance`);
   if (!res.ok) throw new Error(`Project guidance failed: ${res.status}`);
   const data = await res.json();
   if (!data.valid) throw new Error(data.reason ?? "Project guidance failed");
