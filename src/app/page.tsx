@@ -34,11 +34,6 @@ export default function Home() {
             Quantitative Developer & Systematic Researcher
           </h1>
 
-          <p className="text-lg text-neutral-300 max-w-2xl mb-8 leading-relaxed">
-            Building systematic investment frameworks, signal evaluation systems,
-            and AI-assisted research tools.
-          </p>
-
           <a
             href="/resume/resume.pdf"
             download
