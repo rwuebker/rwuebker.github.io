@@ -1,5 +1,3 @@
-import Link from "next/link";
-
 export default function Home() {
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
@@ -12,21 +10,6 @@ export default function Home() {
           </span>
 
           <div className="flex items-center gap-6 text-sm text-neutral-400">
-            <div className="relative group">
-              <button className="hover:text-white transition cursor-pointer">
-                Projects
-              </button>
-
-              <div className="absolute right-0 top-full mt-2 w-44 bg-neutral-900 border border-neutral-800 rounded-md shadow-lg opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all duration-150">
-                <Link
-                  href="/projects/research-lab"
-                  className="block px-4 py-2 text-sm text-neutral-400 hover:text-white hover:bg-neutral-800"
-                >
-                  Research Workspace
-                </Link>
-              </div>
-            </div>
-
             <a
               href="https://linkedin.com/in/rickwuebker"
               target="_blank"
