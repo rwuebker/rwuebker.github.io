@@ -95,6 +95,21 @@ export default function Home() {
               </p>
             </div>
           </div>
+
+          <div className="mt-14 rounded-xl border border-neutral-800 bg-neutral-900/50 p-6 max-w-3xl">
+            <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Featured Project</p>
+            <h3 className="mt-2 text-2xl font-semibold text-white">Dataset Interpreter</h3>
+            <p className="mt-3 text-sm text-neutral-300 leading-relaxed">
+              A production-style AI data understanding system designed for FDE interviews. It ingests unknown
+              datasets, profiles quality, diagnoses issues, and generates grounded next-step guidance for ML.
+            </p>
+            <a
+              href="/projects/dataset-interpreter"
+              className="mt-5 inline-flex rounded-md bg-white px-4 py-2 text-sm font-medium text-black hover:bg-neutral-100 transition"
+            >
+              View Project
+            </a>
+          </div>
         </section>
 
       </div>
