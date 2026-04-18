@@ -2,7 +2,6 @@ export default function Home() {
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
       <div className="max-w-5xl mx-auto px-8 pt-12">
-
         {/* NAVBAR */}
         <nav className="flex justify-between items-center py-5 border-b border-neutral-700">
           <span className="text-sm font-medium tracking-wide text-neutral-300">
@@ -10,6 +9,20 @@ export default function Home() {
           </span>
 
           <div className="flex items-center gap-6 text-sm text-neutral-400">
+            <details className="relative">
+              <summary className="list-none cursor-pointer hover:text-white transition [&::-webkit-details-marker]:hidden">
+                Projects
+              </summary>
+              <div className="absolute right-0 mt-3 w-64 rounded-md border border-neutral-700 bg-neutral-900/95 p-2 shadow-lg">
+                <a
+                  href="/projects/dataset-interpreter"
+                  className="block rounded px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800 hover:text-white transition"
+                >
+                  Dataset Interpreter
+                </a>
+              </div>
+            </details>
+
             <a
               href="https://linkedin.com/in/rickwuebker"
               target="_blank"
@@ -38,9 +51,14 @@ export default function Home() {
             href="/resume/resume.pdf"
             download
             className="inline-flex items-center px-7 py-3 bg-white text-black text-sm font-medium rounded-md hover:bg-neutral-100 transition"
-          >
-            Download Resume
-          </a>
+            >
+              Download Resume
+            </a>
+
+          <p className="mt-8 max-w-2xl text-sm text-neutral-400 leading-relaxed">
+            Building applied AI systems that transform messy data into clear decisions, with a focus on reliable
+            architecture and practical research workflows.
+          </p>
         </section>
 
         {/* WHAT I'M BUILDING TOWARD */}

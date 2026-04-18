@@ -3,13 +3,15 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --font-sans-site: "Avenir Next", "Segoe UI", "Inter", "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-mono-site: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-sans-site);
+  --font-mono: var(--font-mono-site);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -22,7 +24,7 @@
 body {
   background: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-sans-site);
 }
 
 .citation-content {
