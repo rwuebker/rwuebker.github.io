@@ -51,6 +51,48 @@ export default function DatasetInterpreterProjectPage() {
             </div>
           </aside>
         </section>
+
+        <section className="mt-8 rounded-xl border border-neutral-800 bg-neutral-900/50 p-6">
+          <h2 className="text-lg font-semibold">Run Local Demo</h2>
+          <p className="mt-3 text-sm leading-relaxed text-neutral-300">
+            Best-practice mode keeps this interactive app localhost-only to avoid exposing paid API usage publicly.
+            Run both backend and frontend locally:
+          </p>
+
+          <pre className="mt-4 overflow-auto rounded-md border border-neutral-800 bg-neutral-950 p-4 text-xs text-neutral-200">
+{`# Terminal 1: backend
+cd /Users/richardwuebker/Projects/workbench/dataset-interpreter/backend
+set -a
+source ../.env/backend.env
+set +a
+poetry run uvicorn app.main:app --reload
+
+# Terminal 2: frontend
+cd /Users/richardwuebker/Projects/workbench/rwuebker.github.io
+npm run dev`}
+          </pre>
+
+          <h3 className="mt-6 text-sm font-semibold uppercase tracking-[0.14em] text-neutral-400">Required Backend Env Vars</h3>
+          <pre className="mt-3 overflow-auto rounded-md border border-neutral-800 bg-neutral-950 p-4 text-xs text-neutral-200">
+{`# /Users/richardwuebker/Projects/workbench/dataset-interpreter/.env/backend.env
+OPENAI_API_KEY=your_openai_api_key
+KAGGLE_USERNAME=your_kaggle_username
+KAGGLE_KEY=your_kaggle_key
+
+# Recommended toggles
+ENABLE_REAL_AI_INTERPRETATION=true
+ENABLE_REAL_KAGGLE_INGESTION=true
+ENABLE_CLEANING_OUTPUT=true
+SIMULATE_JOB_FAILURE_PROBABILITY=0.0`}
+          </pre>
+
+          <p className="mt-4 text-xs leading-relaxed text-neutral-500">
+            Then open <span className="font-mono text-neutral-300">http://localhost:3000/projects/dataset-interpreter/demo</span>.
+          </p>
+          <p className="mt-2 text-xs leading-relaxed text-neutral-500">
+            Never commit keys to GitHub. Keep them only in local gitignored env files.
+          </p>
+        </section>
       </div>
     </main>
   );
