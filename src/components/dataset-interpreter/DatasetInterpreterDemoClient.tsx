@@ -27,11 +27,28 @@ function normalizeApiBase(rawValue: string): string {
   return trimmed.endsWith("/") ? trimmed.slice(0, -1) : trimmed;
 }
 
+function normalizeCompetitionInput(rawValue: string): string {
+  const trimmed = rawValue.trim();
+  if (!trimmed) {
+    return "";
+  }
+
+  const marker = "/competitions/";
+  const markerIndex = trimmed.indexOf(marker);
+  if (markerIndex === -1) {
+    return trimmed;
+  }
+
+  const afterMarker = trimmed.slice(markerIndex + marker.length);
+  const slug = afterMarker.split(/[/?#]/, 1)[0];
+  return slug || trimmed;
+}
+
 export default function DatasetInterpreterDemoClient() {
   const apiBase = useMemo(() => {
     const fromDedicated = process.env.NEXT_PUBLIC_DATASET_INTERPRETER_API_URL;
     const fromFallback = process.env.NEXT_PUBLIC_API_URL;
-    return normalizeApiBase(fromDedicated || fromFallback || "http://127.0.0.1:8000");
+    return normalizeApiBase(fromDedicated || fromFallback || "http://127.0.0.1:8011");
   }, []);
 
   const [gateReady, setGateReady] = useState(false);
@@ -77,6 +94,12 @@ export default function DatasetInterpreterDemoClient() {
   const createJob = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setJobError("");
+    const competitionSlug = normalizeCompetitionInput(competition);
+    if (!competitionSlug) {
+      setJobError("Please enter a Kaggle competition slug or URL.");
+      return;
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -85,7 +108,7 @@ export default function DatasetInterpreterDemoClient() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           source_type: "kaggle",
-          kaggle: { competition },
+          kaggle: { competition: competitionSlug },
         }),
       });
 
@@ -136,7 +159,7 @@ cd dataset-interpreter/backend
 set -a
 source ../.env/backend.env
 set +a
-poetry run uvicorn app.main:app --reload
+poetry run uvicorn app.main:app --reload --host 127.0.0.1 --port 8011
 
 # Frontend (separate terminal)
 cd rwuebker.github.io
@@ -159,17 +182,26 @@ npm run dev`}
         </p>
 
         <form onSubmit={createJob} className="mt-5 grid gap-3 md:grid-cols-[1fr_auto]">
-          <input
-            type="text"
-            value={competition}
-            onChange={(event) => setCompetition(event.target.value)}
-            className="rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-white outline-none focus:border-neutral-500"
-            placeholder="Kaggle competition (example: titanic)"
-          />
+          <div>
+            <label htmlFor="competition" className="mb-2 block text-xs uppercase tracking-[0.12em] text-neutral-500">
+              Kaggle Competition Slug
+            </label>
+            <input
+              id="competition"
+              type="text"
+              value={competition}
+              onChange={(event) => setCompetition(event.target.value)}
+              className="w-full rounded-md border border-neutral-700 bg-neutral-950 px-3 py-2 text-sm text-white outline-none focus:border-neutral-500"
+              placeholder="titanic or house-prices-advanced-regression-techniques"
+            />
+            <p className="mt-2 text-xs text-neutral-500">
+              Use the slug after <span className="font-mono text-neutral-300">/competitions/</span>, or paste the full Kaggle competition URL.
+            </p>
+          </div>
           <button
             type="submit"
             disabled={isSubmitting}
-            className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black hover:bg-neutral-100 transition disabled:opacity-60"
+            className="rounded-md bg-white px-4 py-2 text-sm font-medium text-black hover:bg-neutral-100 transition disabled:opacity-60 md:self-end"
           >
             {isSubmitting ? "Creating..." : "Create Job"}
           </button>

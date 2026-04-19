@@ -65,7 +65,7 @@ cd /Users/richardwuebker/Projects/workbench/dataset-interpreter/backend
 set -a
 source ../.env/backend.env
 set +a
-poetry run uvicorn app.main:app --reload
+poetry run uvicorn app.main:app --reload --host 127.0.0.1 --port 8011
 
 # Terminal 2: frontend
 cd /Users/richardwuebker/Projects/workbench/rwuebker.github.io
@@ -84,6 +84,12 @@ ENABLE_REAL_AI_INTERPRETATION=true
 ENABLE_REAL_KAGGLE_INGESTION=true
 ENABLE_CLEANING_OUTPUT=true
 SIMULATE_JOB_FAILURE_PROBABILITY=0.0`}
+          </pre>
+
+          <h3 className="mt-6 text-sm font-semibold uppercase tracking-[0.14em] text-neutral-400">Frontend API Override (Optional)</h3>
+          <pre className="mt-3 overflow-auto rounded-md border border-neutral-800 bg-neutral-950 p-4 text-xs text-neutral-200">
+{`# /Users/richardwuebker/Projects/workbench/rwuebker.github.io/.env.local
+NEXT_PUBLIC_DATASET_INTERPRETER_API_URL=http://127.0.0.1:8011`}
           </pre>
 
           <p className="mt-4 text-xs leading-relaxed text-neutral-500">
