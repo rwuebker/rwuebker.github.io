@@ -1,3 +1,4 @@
+import Link from "next/link";
 export default function Home() {
   return (
     <main className="min-h-screen bg-neutral-950 text-white">
@@ -14,12 +15,18 @@ export default function Home() {
                 Projects
               </summary>
               <div className="absolute right-0 mt-3 w-64 rounded-md border border-neutral-700 bg-neutral-900/95 p-2 shadow-lg">
-                <a
+                <Link
+                  href="/projects/left-tail-volatility"
+                  className="block rounded px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800 hover:text-white transition"
+                >
+                  Predicting the Left Tail
+                </Link>
+                <Link
                   href="/projects/dataset-interpreter"
                   className="block rounded px-3 py-2 text-sm text-neutral-200 hover:bg-neutral-800 hover:text-white transition"
                 >
                   Dataset Interpreter
-                </a>
+                </Link>
               </div>
             </details>
 
@@ -96,6 +103,22 @@ export default function Home() {
             </div>
           </div>
 
+          <div className="mt-14 rounded-xl border border-emerald-900 bg-neutral-900/50 p-6 max-w-3xl">
+            <p className="text-xs uppercase tracking-[0.18em] text-emerald-400">New Research · In Progress</p>
+            <h3 className="mt-2 text-2xl font-semibold text-white">Predicting the Left Tail</h3>
+            <p className="mt-3 text-sm text-neutral-300 leading-relaxed">
+              Can GARCH and machine learning warn us about downside risk? A new study of whether
+              information available today can predict negative price movement in the S&amp;P 500
+              over the next five trading days.
+            </p>
+            <Link
+              href="/projects/left-tail-volatility"
+              className="mt-5 inline-flex rounded-md bg-white px-4 py-2 text-sm font-medium text-black hover:bg-neutral-100 transition"
+            >
+              Explore the Research
+            </Link>
+          </div>
+
           <div className="mt-14 rounded-xl border border-neutral-800 bg-neutral-900/50 p-6 max-w-3xl">
             <p className="text-xs uppercase tracking-[0.18em] text-neutral-500">Featured Project</p>
             <h3 className="mt-2 text-2xl font-semibold text-white">Dataset Interpreter</h3>
@@ -103,12 +126,12 @@ export default function Home() {
               A production-style AI data understanding system designed for FDE interviews. It ingests unknown
               datasets, profiles quality, diagnoses issues, and generates grounded next-step guidance for ML.
             </p>
-            <a
+            <Link
               href="/projects/dataset-interpreter"
               className="mt-5 inline-flex rounded-md bg-white px-4 py-2 text-sm font-medium text-black hover:bg-neutral-100 transition"
             >
               View Project
-            </a>
+            </Link>
           </div>
         </section>
 
